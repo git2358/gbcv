@@ -51,6 +51,24 @@ body {
 ============================================================
 IMAGE VIEWER
 ============================================================
+
+The image gets a rendering area equal to almost the
+entire viewport.
+
+object-fit: contain keeps the original aspect ratio.
+
+This means:
+
+128 × 112
+    ↓
+scales up until width OR height reaches the limit
+
+160 × 144
+    ↓
+scales up until width OR height reaches the limit
+
+Nothing is cropped or stretched.
+============================================================
 */
 
 #photo {
@@ -58,24 +76,21 @@ IMAGE VIEWER
     display: none;
 
     /*
-     * Natural aspect ratio.
+     * Give the image a large rendering box.
+     *
+     * This is the important part that allows the
+     * tiny Game Boy Camera image to actually scale up.
      */
-    width: auto;
-    height: auto;
+    width: 98vw;
+    height: 98vh;
 
     /*
-     * Always fit inside the viewport.
-     */
-    max-width: 98vw;
-    max-height: 98vh;
-
-    /*
-     * Preserve aspect ratio.
+     * Preserve the original aspect ratio.
      */
     object-fit: contain;
 
     /*
-     * Always centre the image.
+     * Centre it.
      */
     position: absolute;
 
@@ -86,8 +101,9 @@ IMAGE VIEWER
         translate(-50%, -50%);
 
     /*
-     * Game Boy Camera pixels should
-     * never be smoothed.
+     * Game Boy Camera pixels.
+     *
+     * Prevent browser interpolation.
      */
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -316,9 +332,6 @@ IMAGE
 #   DEFLATE
 #       ↓
 #   Base64URL
-#
-#
-# The format is lossless.
 #
 ################################################################
 */
@@ -658,9 +671,6 @@ function rleEncode(bytes) {
         i < bytes.length
     ) {
 
-        /*
-         * Zero run.
-         */
         if (
             bytes[i] === 0
         ) {
@@ -682,10 +692,6 @@ function rleEncode(bytes) {
             }
 
 
-            /*
-             * A single zero is cheaper
-             * as a literal.
-             */
             if (
                 count === 1
             ) {
@@ -763,9 +769,6 @@ function rleDecode(bytes) {
             bytes[i++];
 
 
-        /*
-         * Normal literal.
-         */
         if (
             value !== 255
         ) {
@@ -779,9 +782,6 @@ function rleDecode(bytes) {
         }
 
 
-        /*
-         * RLE / escape sequence.
-         */
         if (
             i + 1 >= bytes.length
         ) {
@@ -814,7 +814,7 @@ function rleDecode(bytes) {
 
 
         /*
-         * FF 00 01 = literal FF
+         * Literal FF.
          */
         if (
             count === 1
@@ -828,7 +828,7 @@ function rleDecode(bytes) {
 
 
         /*
-         * Otherwise zero run.
+         * Zero run.
          */
         for (
             let n = 0;
@@ -933,7 +933,8 @@ function packPixels(
 
 
     /*
-     * Game Boy Camera uses four shades.
+     * Lossless GBC requires four colours
+     * or fewer.
      */
     if (
         colours.length > 4
@@ -979,7 +980,7 @@ function packPixels(
 
 
     /*
-     * Pad palette to four entries.
+     * Pad palette.
      */
     while (
         colours.length < 4
@@ -1074,9 +1075,6 @@ function packPixels(
     }
 
 
-    /*
-     * Final partial byte.
-     */
     if (
         pixelPosition !== 0
     ) {
@@ -1143,8 +1141,6 @@ function createRawGBC1(
 
 
     /*
-     * Flags:
-     *
      * bits 0-1 = dimensions
      * bits 2-3 = codec
      */
@@ -1156,7 +1152,8 @@ function createRawGBC1(
     /*
      * Header:
      *
-     * 2 bytes flags/version
+     * 1 byte version
+     * 1 byte flags
      * 12 bytes palette
      */
     const raw =
@@ -1206,9 +1203,6 @@ function createRawGBC1(
     }
 
 
-    /*
-     * Pixel data.
-     */
     raw.set(
         pixelData,
         14
@@ -1244,28 +1238,24 @@ async function encodeGBC1(
 
 
     /*
-     * CODEC 0
+     * Codec 0:
      *
      * Packed → DEFLATE
      */
-    const raw0 =
-        createRawGBC1(
-            width,
-            height,
-            palette,
-            packed,
-            0
-        );
-
-
     const compressed0 =
         await deflate(
-            raw0
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                packed,
+                0
+            )
         );
 
 
     /*
-     * CODEC 1
+     * Codec 1:
      *
      * Packed → XOR → DEFLATE
      */
@@ -1275,24 +1265,20 @@ async function encodeGBC1(
         );
 
 
-    const raw1 =
-        createRawGBC1(
-            width,
-            height,
-            palette,
-            xor,
-            1
-        );
-
-
     const compressed1 =
         await deflate(
-            raw1
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                xor,
+                1
+            )
         );
 
 
     /*
-     * CODEC 2
+     * Codec 2:
      *
      * Packed → XOR → RLE → DEFLATE
      */
@@ -1302,24 +1288,20 @@ async function encodeGBC1(
         );
 
 
-    const raw2 =
-        createRawGBC1(
-            width,
-            height,
-            palette,
-            rle,
-            2
-        );
-
-
     const compressed2 =
         await deflate(
-            raw2
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                rle,
+                2
+            )
         );
 
 
     /*
-     * Choose smallest.
+     * Pick smallest.
      */
     let best =
         compressed0;
@@ -1347,9 +1329,6 @@ async function encodeGBC1(
     }
 
 
-    /*
-     * Create URL payload.
-     */
     return (
         GBC_MAGIC +
         "/" +
@@ -1409,9 +1388,6 @@ async function decodeGBC1(
     }
 
 
-    /*
-     * Version.
-     */
     if (
         raw[0] !== GBC_VERSION
     ) {
@@ -1546,7 +1522,7 @@ async function decodeGBC1(
 
 
     /*
-     * Validate pixel data size.
+     * Validate size.
      */
     const expectedLength =
         Math.ceil(
@@ -1599,7 +1575,7 @@ async function decodeGBC1(
 
 
     /*
-     * Unpack pixels.
+     * Unpack 2-bit pixels.
      */
     let pixel =
         0;
@@ -1689,7 +1665,7 @@ async function decodeGBC1(
 
 /*
 ============================================================
-LOAD GBC1 IMAGE
+LOAD GBC1
 ============================================================
 */
 
@@ -1704,10 +1680,9 @@ async function loadGBC1(
 
 
     /*
-     * PNG is created only in memory so the
-     * existing <img> element can display it.
+     * Temporary PNG only for display.
      *
-     * The PNG is NOT stored in the URL.
+     * It is NOT stored in the URL.
      */
     const imageUrl =
         canvas.toDataURL(
@@ -1754,7 +1729,7 @@ async function loadGBC1(
 
 /*
 ============================================================
-LOAD OLD PNG/BASE64 URL
+LEGACY PNG URL SUPPORT
 ============================================================
 */
 
@@ -1847,9 +1822,6 @@ async function loadImageFromHash() {
     }
 
 
-    /*
-     * Hide old error.
-     */
     errorBox.style.display =
         "none";
 
@@ -1857,7 +1829,7 @@ async function loadImageFromHash() {
     try {
 
         /*
-         * New GBC1 format.
+         * New format.
          */
         if (
             encoded.startsWith(
@@ -1876,7 +1848,7 @@ async function loadImageFromHash() {
 
 
         /*
-         * Existing PNG/Base64 format.
+         * Old PNG/Base64 format.
          */
         loadLegacyPNG(
             encoded
@@ -1968,9 +1940,6 @@ fileInput.addEventListener(
                                 );
 
 
-                            /*
-                             * Disable interpolation.
-                             */
                             ctx.imageSmoothingEnabled =
                                 false;
 
@@ -1985,7 +1954,7 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Get exact pixels.
+                             * Read exact pixels.
                              */
                             const imageData =
                                 ctx.getImageData(
@@ -1997,9 +1966,7 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Encode image.
-                             *
-                             * NO PNG is put into the URL.
+                             * Encode.
                              */
                             const encoded =
                                 await encodeGBC1(
@@ -2010,23 +1977,16 @@ fileInput.addEventListener(
 
 
                             /*
-                             * IMPORTANT:
-                             *
-                             * Changing only the hash does not
-                             * reload the page.
-                             *
-                             * Therefore we explicitly call
-                             * loadImageFromHash() below.
+                             * Update URL.
                              */
                             window.location.hash =
                                 encoded;
 
 
                             /*
-                             * Immediately display the newly
-                             * generated image.
+                             * Immediately load it.
                              *
-                             * NO REFRESH REQUIRED.
+                             * No refresh required.
                              */
                             await loadImageFromHash();
 
@@ -2084,22 +2044,7 @@ fileInput.addEventListener(
 
 /*
 ============================================================
-HASH CHANGED
-============================================================
-
-This makes browser Back/Forward work.
-
-Example:
-
-Photo A
-    ↓
-Photo B
-    ↓
-Photo C
-    ↓
-BACK
-    ↓
-Photo B
+BROWSER BACK / FORWARD
 ============================================================
 */
 
