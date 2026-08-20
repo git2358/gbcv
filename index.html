@@ -21,7 +21,6 @@
     box-sizing: border-box;
 }
 
-
 html,
 body {
 
@@ -36,7 +35,6 @@ body {
 
 }
 
-
 body {
 
     display: flex;
@@ -45,13 +43,6 @@ body {
     justify-content: center;
 
 }
-
-
-/*
-============================================================
-IMAGE VIEWER
-============================================================
-*/
 
 #photo {
 
@@ -81,13 +72,6 @@ IMAGE VIEWER
 
 }
 
-
-/*
-============================================================
-UPLOAD SCREEN
-============================================================
-*/
-
 #upload {
 
     display: flex;
@@ -103,8 +87,9 @@ UPLOAD SCREEN
 
     text-align: center;
 
-}
+    font-family: sans-serif;
 
+}
 
 #upload label {
 
@@ -118,14 +103,11 @@ UPLOAD SCREEN
 
     border-radius: 8px;
 
-    font-family: sans-serif;
-
     font-size: 16px;
 
     cursor: pointer;
 
 }
-
 
 #upload label:hover {
 
@@ -133,19 +115,11 @@ UPLOAD SCREEN
 
 }
 
-
 #file {
 
     display: none;
 
 }
-
-
-/*
-============================================================
-ERROR
-============================================================
-*/
 
 #error {
 
@@ -178,14 +152,9 @@ ERROR
 
     z-index: 10;
 
+    white-space: pre-line;
+
 }
-
-
-/*
-============================================================
-COPIED MESSAGE
-============================================================
-*/
 
 #copied {
 
@@ -220,9 +189,7 @@ COPIED MESSAGE
 
 </head>
 
-
 <body>
-
 
 <div id="upload">
 
@@ -238,86 +205,58 @@ COPIED MESSAGE
 
 </div>
 
-
 <img
     id="photo"
     alt="Game Boy Camera Photo"
 >
 
-
 <div id="error"></div>
-
 
 <div id="copied">
     URL copied!
 </div>
-
 
 <script>
 
 /*
 ################################################################
 #
-# GBC3
+# GBC4
 #
-# GAME BOY CAMERA COMPACT URL FORMAT
+# GAME BOY CAMERA DISCORD COMPACT FORMAT
 #
 ################################################################
 #
-# URL:
+# GBC4 is intentionally LOSSY.
 #
-#   #GBC3/<Base64URL>
-#
-#
-# DESIGN
-#
-# Each row is encoded independently.
-#
-# For every row the encoder chooses:
-#
-#   RLE
-#       OR
-#   packed 2-bit pixels
-#
-# If a row is identical to the previous row:
-#
-#   REPEAT
-#
-# The complete binary stream is then DEFLATE compressed.
+# The goal is to produce a visually recognizable Game Boy
+# Camera-style image using a URL short enough to share on
+# services with URL length limits.
 #
 #
-# RLE TOKEN
+# PIPELINE
 #
-#   bits 7-6 = shade
-#   bits 5-0 = run length - 1
+# Original image
+#       ↓
+# grayscale
+#       ↓
+# resize
+#       ↓
+# ordered 4-shade dithering
+#       ↓
+# 2-bit pixels
+#       ↓
+# compact bit packing
+#       ↓
+# optional delta transform
+#       ↓
+# DEFLATE
+#       ↓
+# Base64URL
 #
-# Therefore:
 #
-#   00xxxxxx = shade 0
-#   01xxxxxx = shade 1
-#   10xxxxxx = shade 2
-#   11xxxxxx = shade 3
-#
-# Maximum run per token = 64 pixels.
-#
-#
-# ROW MODES
-#
-#   0 = RLE
-#   1 = PACKED
-#   2 = REPEAT PREVIOUS ROW
-#
-#
-# PACKED
-#
-# Four pixels per byte.
-#
-# Pixel order:
-#
-#   bits 7-6 = pixel 0
-#   bits 5-4 = pixel 1
-#   bits 3-2 = pixel 2
-#   bits 1-0 = pixel 3
+# The encoder tries several resolutions and compression modes
+# and automatically selects the shortest result.
 #
 ################################################################
 */
@@ -331,8 +270,8 @@ const GBC3_MAGIC =
     "GBC3";
 
 
-const GBC_VERSION =
-    3;
+const GBC4_MAGIC =
+    "GBC4";
 
 
 /*
@@ -390,7 +329,7 @@ function showError(message) {
 
 /*
 ============================================================
-BASE64URL ENCODE
+BASE64URL
 ============================================================
 */
 
@@ -568,61 +507,1219 @@ async function inflate(bytes) {
 
 /*
 ============================================================
-PACK ONE ROW
+BAYER MATRIX
 ============================================================
 */
 
-function packRow(
-    row,
-    width
+/*
+ * 4×4 ordered dithering matrix.
+ *
+ * This produces a Game Boy Camera-like dither pattern.
+ */
+
+const BAYER_4 = [
+
+    0,  8,  2, 10,
+
+   12,  4, 14,  6,
+
+    3, 11,  1,  9,
+
+   15,  7, 13,  5
+
+];
+
+
+/*
+============================================================
+RESIZE + GRAYSCALE + DITHER
+============================================================
+*/
+
+function createGBC4Pixels(
+    sourceImage,
+    width,
+    height
 ) {
 
-    const packed =
+    const canvas =
+        document.createElement(
+            "canvas"
+        );
+
+
+    canvas.width =
+        width;
+
+
+    canvas.height =
+        height;
+
+
+    const ctx =
+        canvas.getContext(
+            "2d",
+            {
+                willReadFrequently: true
+            }
+        );
+
+
+    /*
+     * Smooth resizing is intentional here.
+     *
+     * We want the photographic information to be
+     * averaged before converting it into four shades.
+     */
+    ctx.imageSmoothingEnabled =
+        true;
+
+
+    ctx.drawImage(
+        sourceImage,
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    const imageData =
+        ctx.getImageData(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+    const pixels =
         new Uint8Array(
-            Math.ceil(
-                width / 4
-            )
+            width *
+            height
         );
 
 
     for (
-        let x = 0;
-        x < width;
-        x++
+        let y = 0;
+        y < height;
+        y++
     ) {
 
-        const pixel =
-            row[x];
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const index =
+                (
+                    y * width +
+                    x
+                ) * 4;
 
 
-        const byteIndex =
-            Math.floor(
-                x / 4
-            );
+            const r =
+                imageData.data[
+                    index
+                ];
 
 
-        const shift =
-            6 -
-            (
-                (x % 4) *
-                2
-            );
+            const g =
+                imageData.data[
+                    index + 1
+                ];
 
 
-        packed[byteIndex] |=
-            pixel << shift;
+            const b =
+                imageData.data[
+                    index + 2
+                ];
+
+
+            /*
+             * Standard luminance.
+             */
+            const luminance =
+                (
+                    0.299 * r +
+                    0.587 * g +
+                    0.114 * b
+                );
+
+
+            /*
+             * Ordered dithering.
+             *
+             * Convert 0-255 into four shades.
+             */
+            const threshold =
+                (
+                    BAYER_4[
+                        (
+                            y & 3
+                        ) * 4 +
+                        (
+                            x & 3
+                        )
+                    ] - 7.5
+                ) * 4;
+
+
+            const adjusted =
+                Math.max(
+                    0,
+                    Math.min(
+                        255,
+                        luminance +
+                        threshold
+                    )
+                );
+
+
+            let shade;
+
+
+            if (
+                adjusted < 64
+            ) {
+
+                shade = 0;
+
+            }
+            else if (
+                adjusted < 128
+            ) {
+
+                shade = 1;
+
+            }
+            else if (
+                adjusted < 192
+            ) {
+
+                shade = 2;
+
+            }
+            else {
+
+                shade = 3;
+
+            }
+
+
+            pixels[
+                y * width + x
+            ] =
+                shade;
+
+        }
 
     }
 
 
-    return packed;
+    return pixels;
 
 }
 
 
 /*
 ============================================================
-UNPACK ONE ROW
+PACK 2-BIT PIXELS
+============================================================
+*/
+
+function packPixels(
+    pixels
+) {
+
+    const output =
+        new Uint8Array(
+            Math.ceil(
+                pixels.length / 4
+            )
+        );
+
+
+    for (
+        let i = 0;
+        i < pixels.length;
+        i++
+    ) {
+
+        const byteIndex =
+            Math.floor(
+                i / 4
+            );
+
+
+        const shift =
+            6 -
+            (
+                (
+                    i % 4
+                ) * 2
+            );
+
+
+        output[
+            byteIndex
+        ] |=
+            pixels[i] <<
+            shift;
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+DELTA ENCODE
+============================================================
+*/
+
+/*
+ * Instead of storing the actual pixel value, store the
+ * difference between adjacent pixels.
+ *
+ * Because values are only 2 bits, this is performed modulo 4.
+ *
+ * This is especially useful when dithering patterns repeat.
+ */
+
+function deltaEncode(
+    pixels,
+    width
+) {
+
+    const output =
+        new Uint8Array(
+            pixels.length
+        );
+
+
+    let previous =
+        0;
+
+
+    for (
+        let y = 0;
+        y < pixels.length / width;
+        y++
+    ) {
+
+        previous =
+            0;
+
+
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const index =
+                y * width + x;
+
+
+            output[index] =
+                (
+                    pixels[index] -
+                    previous +
+                    4
+                ) & 3;
+
+
+            previous =
+                pixels[index];
+
+        }
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+DELTA DECODE
+============================================================
+*/
+
+function deltaDecode(
+    pixels,
+    width
+) {
+
+    const output =
+        new Uint8Array(
+            pixels.length
+        );
+
+
+    for (
+        let y = 0;
+        y < pixels.length / width;
+        y++
+    ) {
+
+        let previous =
+            0;
+
+
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const index =
+                y * width + x;
+
+
+            output[index] =
+                (
+                    previous +
+                    pixels[index]
+                ) & 3;
+
+
+            previous =
+                output[index];
+
+        }
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+VERTICAL DELTA
+============================================================
+*/
+
+function verticalDeltaEncode(
+    pixels,
+    width,
+    height
+) {
+
+    const output =
+        new Uint8Array(
+            pixels.length
+        );
+
+
+    for (
+        let y = 0;
+        y < height;
+        y++
+    ) {
+
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const index =
+                y * width + x;
+
+
+            if (
+                y === 0
+            ) {
+
+                output[index] =
+                    pixels[index];
+
+            }
+            else {
+
+                output[index] =
+                    (
+                        pixels[index] -
+                        pixels[
+                            index - width
+                        ] +
+                        4
+                    ) & 3;
+
+            }
+
+        }
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+VERTICAL DELTA DECODE
+============================================================
+*/
+
+function verticalDeltaDecode(
+    pixels,
+    width,
+    height
+) {
+
+    const output =
+        new Uint8Array(
+            pixels.length
+        );
+
+
+    for (
+        let y = 0;
+        y < height;
+        y++
+    ) {
+
+        for (
+            let x = 0;
+            x < width;
+            x++
+        ) {
+
+            const index =
+                y * width + x;
+
+
+            if (
+                y === 0
+            ) {
+
+                output[index] =
+                    pixels[index];
+
+            }
+            else {
+
+                output[index] =
+                    (
+                        pixels[index] +
+                        output[
+                            index - width
+                        ]
+                    ) & 3;
+
+            }
+
+        }
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+CREATE GBC4 RAW
+============================================================
+*/
+
+function createGBC4Raw(
+    width,
+    height,
+    pixels,
+    mode
+) {
+
+    /*
+     * Header:
+     *
+     * byte 0 = version
+     * byte 1 = width
+     * byte 2 = height
+     * byte 3 = encoding mode
+     *
+     * Mode:
+     *
+     * 0 = packed pixels
+     * 1 = horizontal delta
+     * 2 = vertical delta
+     */
+
+    const packed =
+        packPixels(
+            pixels
+        );
+
+
+    const raw =
+        new Uint8Array(
+            4 +
+            packed.length
+        );
+
+
+    raw[0] =
+        4;
+
+
+    raw[1] =
+        width;
+
+
+    raw[2] =
+        height;
+
+
+    raw[3] =
+        mode;
+
+
+    raw.set(
+        packed,
+        4
+    );
+
+
+    return raw;
+
+}
+
+
+/*
+============================================================
+ENCODE ONE GBC4 CANDIDATE
+============================================================
+*/
+
+async function encodeGBC4Candidate(
+    sourceImage,
+    width,
+    height,
+    mode
+) {
+
+    let pixels =
+        createGBC4Pixels(
+            sourceImage,
+            width,
+            height
+        );
+
+
+    /*
+     * Apply transform.
+     */
+    if (
+        mode === 1
+    ) {
+
+        pixels =
+            deltaEncode(
+                pixels,
+                width
+            );
+
+    }
+    else if (
+        mode === 2
+    ) {
+
+        pixels =
+            verticalDeltaEncode(
+                pixels,
+                width,
+                height
+            );
+
+    }
+
+
+    const raw =
+        createGBC4Raw(
+            width,
+            height,
+            pixels,
+            mode
+        );
+
+
+    const compressed =
+        await deflate(
+            raw
+        );
+
+
+    const encoded =
+        GBC4_MAGIC +
+        "/" +
+        bytesToBase64Url(
+            compressed
+        );
+
+
+    return {
+        encoded,
+        width,
+        height,
+        mode,
+        rawSize: raw.length,
+        compressedSize: compressed.length
+    };
+
+}
+
+
+/*
+============================================================
+ENCODE GBC4
+============================================================
+*/
+
+async function encodeGBC4(
+    sourceImage
+) {
+
+    /*
+     * Candidate resolutions.
+     *
+     * These are deliberately much smaller than the original
+     * 128×112 / 160×144 image.
+     *
+     * The image is reconstructed as a larger pixel-art image
+     * when displayed.
+     */
+
+    const resolutions = [
+
+        [64, 56],
+
+        [56, 49],
+
+        [48, 42],
+
+        [40, 35],
+
+        [32, 28]
+
+    ];
+
+
+    const candidates = [];
+
+
+    /*
+     * Try every resolution with every predictor.
+     */
+    for (
+        const resolution of resolutions
+    ) {
+
+        const width =
+            resolution[0];
+
+
+        const height =
+            resolution[1];
+
+
+        for (
+            const mode of [0, 1, 2]
+        ) {
+
+            try {
+
+                const candidate =
+                    await encodeGBC4Candidate(
+                        sourceImage,
+                        width,
+                        height,
+                        mode
+                    );
+
+
+                candidates.push(
+                    candidate
+                );
+
+            }
+            catch (error) {
+
+                console.warn(
+                    "GBC4 candidate failed:",
+                    width,
+                    height,
+                    mode,
+                    error
+                );
+
+            }
+
+        }
+
+    }
+
+
+    if (
+        candidates.length === 0
+    ) {
+
+        throw new Error(
+            "Could not create a GBC4 image."
+        );
+
+    }
+
+
+    /*
+     * Sort by URL length.
+     */
+    candidates.sort(
+        (a, b) =>
+            a.encoded.length -
+            b.encoded.length
+    );
+
+
+    /*
+     * Smallest candidate wins.
+     */
+    const best =
+        candidates[0];
+
+
+    console.log(
+        "GBC4 candidates:"
+    );
+
+
+    for (
+        const candidate of candidates
+    ) {
+
+        console.log(
+            candidate.width +
+            "×" +
+            candidate.height,
+            "mode",
+            candidate.mode,
+            "→",
+            candidate.encoded.length,
+            "chars"
+        );
+
+    }
+
+
+    console.log(
+        "GBC4 selected:",
+        best.width +
+        "×" +
+        best.height,
+        "mode",
+        best.mode,
+        "URL:",
+        best.encoded.length,
+        "characters"
+    );
+
+
+    return best;
+
+}
+
+
+/*
+============================================================
+DECODE GBC4
+============================================================
+*/
+
+async function decodeGBC4(
+    encoded
+) {
+
+    if (
+        !encoded.startsWith(
+            GBC4_MAGIC + "/"
+        )
+    ) {
+
+        throw new Error(
+            "Invalid GBC4 image."
+        );
+
+    }
+
+
+    const compressed =
+        base64UrlToBytes(
+            encoded.substring(
+                GBC4_MAGIC.length + 1
+            )
+        );
+
+
+    const raw =
+        await inflate(
+            compressed
+        );
+
+
+    if (
+        raw.length < 4
+    ) {
+
+        throw new Error(
+            "GBC4 image is too short."
+        );
+
+    }
+
+
+    if (
+        raw[0] !== 4
+    ) {
+
+        throw new Error(
+            "Unsupported GBC4 version."
+        );
+
+    }
+
+
+    const width =
+        raw[1];
+
+
+    const height =
+        raw[2];
+
+
+    const mode =
+        raw[3];
+
+
+    if (
+        width < 1 ||
+        height < 1 ||
+        width > 255 ||
+        height > 255
+    ) {
+
+        throw new Error(
+            "Invalid GBC4 dimensions."
+        );
+
+    }
+
+
+    const packed =
+        raw.subarray(
+            4
+        );
+
+
+    const expectedLength =
+        Math.ceil(
+            width *
+            height /
+            4
+        );
+
+
+    if (
+        packed.length !==
+        expectedLength
+    ) {
+
+        throw new Error(
+            "Invalid GBC4 pixel data."
+        );
+
+    }
+
+
+    /*
+     * Unpack.
+     */
+    let pixels =
+        new Uint8Array(
+            width *
+            height
+        );
+
+
+    for (
+        let i = 0;
+        i < pixels.length;
+        i++
+    ) {
+
+        const byteIndex =
+            Math.floor(
+                i / 4
+            );
+
+
+        const shift =
+            6 -
+            (
+                (
+                    i % 4
+                ) * 2
+            );
+
+
+        pixels[i] =
+            (
+                packed[
+                    byteIndex
+                ] >>
+                shift
+            ) & 3;
+
+    }
+
+
+    /*
+     * Reverse predictor.
+     */
+    if (
+        mode === 1
+    ) {
+
+        pixels =
+            deltaDecode(
+                pixels,
+                width
+            );
+
+    }
+    else if (
+        mode === 2
+    ) {
+
+        pixels =
+            verticalDeltaDecode(
+                pixels,
+                width,
+                height
+            );
+
+    }
+    else if (
+        mode !== 0
+    ) {
+
+        throw new Error(
+            "Unknown GBC4 encoding mode."
+        );
+
+    }
+
+
+    /*
+     * Create display canvas.
+     */
+    const canvas =
+        document.createElement(
+            "canvas"
+        );
+
+
+    canvas.width =
+        width;
+
+
+    canvas.height =
+        height;
+
+
+    const ctx =
+        canvas.getContext(
+            "2d"
+        );
+
+
+    const imageData =
+        ctx.createImageData(
+            width,
+            height
+        );
+
+
+    /*
+     * Classic Game Boy Camera-style palette.
+     *
+     * The actual source photo is reduced to these
+     * four shades before encoding.
+     */
+    const palette = [
+
+        [255, 255, 255],
+
+        [170, 170, 170],
+
+        [85, 85, 85],
+
+        [0, 0, 0]
+
+    ];
+
+
+    for (
+        let i = 0;
+        i < pixels.length;
+        i++
+    ) {
+
+        const shade =
+            pixels[i];
+
+
+        const colour =
+            palette[
+                shade
+            ];
+
+
+        const outputOffset =
+            i * 4;
+
+
+        imageData.data[
+            outputOffset
+        ] =
+            colour[0];
+
+
+        imageData.data[
+            outputOffset + 1
+        ] =
+            colour[1];
+
+
+        imageData.data[
+            outputOffset + 2
+        ] =
+            colour[2];
+
+
+        imageData.data[
+            outputOffset + 3
+        ] =
+            255;
+
+    }
+
+
+    ctx.putImageData(
+        imageData,
+        0,
+        0
+    );
+
+
+    return canvas;
+
+}
+
+
+/*
+============================================================
+DISPLAY CANVAS
+============================================================
+*/
+
+function displayCanvas(
+    canvas
+) {
+
+    const imageUrl =
+        canvas.toDataURL(
+            "image/png"
+        );
+
+
+    photo.onload =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "block";
+
+        };
+
+
+    photo.onerror =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "none";
+
+
+            showError(
+                "Could not display image."
+            );
+
+        };
+
+
+    photo.src =
+        imageUrl;
+
+}
+
+
+/*
+============================================================
+LOAD GBC4
+============================================================
+*/
+
+async function loadGBC4(
+    encoded
+) {
+
+    const canvas =
+        await decodeGBC4(
+            encoded
+        );
+
+
+    displayCanvas(
+        canvas
+    );
+
+}
+
+
+/*
+============================================================
+GBC3 DECODER
 ============================================================
 */
 
@@ -652,14 +1749,17 @@ function unpackRow(
         const shift =
             6 -
             (
-                (x % 4) *
-                2
+                (
+                    x % 4
+                ) * 2
             );
 
 
         row[x] =
             (
-                packed[byteIndex] >>
+                packed[
+                    byteIndex
+                ] >>
                 shift
             ) & 3;
 
@@ -670,77 +1770,6 @@ function unpackRow(
 
 }
 
-
-/*
-============================================================
-RLE ENCODE ONE ROW
-============================================================
-*/
-
-function encodeRowRLE(row) {
-
-    const output = [];
-
-
-    let x = 0;
-
-
-    while (
-        x < row.length
-    ) {
-
-        const shade =
-            row[x];
-
-
-        let count =
-            1;
-
-
-        while (
-            x + count < row.length &&
-            row[x + count] === shade &&
-            count < 64
-        ) {
-
-            count++;
-
-        }
-
-
-        /*
-         * One byte contains:
-         *
-         * shade = top 2 bits
-         * count = bottom 6 bits
-         */
-        output.push(
-            (
-                shade << 6
-            ) |
-            (
-                count - 1
-            )
-        );
-
-
-        x += count;
-
-    }
-
-
-    return new Uint8Array(
-        output
-    );
-
-}
-
-
-/*
-============================================================
-DECODE ONE RLE ROW
-============================================================
-*/
 
 function decodeRowRLE(
     bytes,
@@ -819,601 +1848,13 @@ function decodeRowRLE(
 
 /*
 ============================================================
-ROWS → GBC3 STREAM
+LOAD GBC3
 ============================================================
 */
 
-function createGBC3Rows(
-    rows,
-    width
-) {
-
-    const output = [];
-
-
-    let previousRow =
-        null;
-
-
-    for (
-        let y = 0;
-        y < rows.length;
-        y++
-    ) {
-
-        const row =
-            rows[y];
-
-
-        /*
-         * ----------------------------------------------------
-         * IDENTICAL ROW
-         * ----------------------------------------------------
-         *
-         * If the complete row is identical to the previous
-         * row, use one byte instead of encoding the row again.
-         */
-        if (
-            previousRow !== null
-        ) {
-
-            let identical =
-                true;
-
-
-            for (
-                let x = 0;
-                x < width;
-                x++
-            ) {
-
-                if (
-                    row[x] !==
-                    previousRow[x]
-                ) {
-
-                    identical =
-                        false;
-
-                    break;
-
-                }
-
-            }
-
-
-            if (
-                identical
-            ) {
-
-                /*
-                 * Mode 2 = repeat previous row
-                 */
-                output.push(2);
-
-
-                previousRow =
-                    row;
-
-
-                continue;
-
-            }
-
-        }
-
-
-        /*
-         * ----------------------------------------------------
-         * CREATE BOTH REPRESENTATIONS
-         * ----------------------------------------------------
-         */
-
-        const rle =
-            encodeRowRLE(
-                row
-            );
-
-
-        const packed =
-            packRow(
-                row,
-                width
-            );
-
-
-        /*
-         * ----------------------------------------------------
-         * CHOOSE SMALLEST
-         * ----------------------------------------------------
-         *
-         * RLE has a one-byte mode prefix.
-         *
-         * Packed also has a one-byte mode prefix.
-         */
-        if (
-            rle.length + 1 <
-            packed.length + 1
-        ) {
-
-            /*
-             * Mode 0 = RLE
-             */
-            output.push(0);
-
-
-            for (
-                const byte of rle
-            ) {
-
-                output.push(byte);
-
-            }
-
-        }
-        else {
-
-            /*
-             * Mode 1 = packed 2-bit
-             */
-            output.push(1);
-
-
-            for (
-                const byte of packed
-            ) {
-
-                output.push(byte);
-
-            }
-
-        }
-
-
-        previousRow =
-            row;
-
-    }
-
-
-    return new Uint8Array(
-        output
-    );
-
-}
-
-
-/*
-============================================================
-GBC3 HEADER
-============================================================
-*/
-
-function createGBC3Raw(
-    width,
-    height,
-    palette,
-    rowData
-) {
-
-    let dimensionCode;
-
-
-    if (
-        width === 128 &&
-        height === 112
-    ) {
-
-        dimensionCode =
-            0;
-
-    }
-    else if (
-        width === 160 &&
-        height === 144
-    ) {
-
-        dimensionCode =
-            1;
-
-    }
-    else {
-
-        throw new Error(
-            "Game Boy Camera images must be " +
-            "128×112 or 160×144."
-        );
-
-    }
-
-
-    /*
-     * Header:
-     *
-     * byte 0 = version
-     * byte 1 = dimensions
-     * bytes 2-13 = palette
-     */
-    const raw =
-        new Uint8Array(
-            14 +
-            rowData.length
-        );
-
-
-    raw[0] =
-        GBC_VERSION;
-
-
-    raw[1] =
-        dimensionCode;
-
-
-    /*
-     * Palette.
-     */
-    for (
-        let i = 0;
-        i < 4;
-        i++
-    ) {
-
-        const colour =
-            palette[i];
-
-
-        const offset =
-            2 +
-            i * 3;
-
-
-        raw[offset] =
-            (
-                colour >> 16
-            ) & 255;
-
-
-        raw[offset + 1] =
-            (
-                colour >> 8
-            ) & 255;
-
-
-        raw[offset + 2] =
-            colour & 255;
-
-    }
-
-
-    raw.set(
-        rowData,
-        14
-    );
-
-
-    return raw;
-
-}
-
-
-/*
-============================================================
-PACK IMAGE INTO FOUR SHADES
-============================================================
-*/
-
-function convertToFourShades(
-    imageData,
-    width,
-    height
-) {
-
-    const pixels =
-        imageData.data;
-
-
-    const frequency =
-        new Map();
-
-
-    /*
-     * Count exact colours.
-     */
-    for (
-        let i = 0;
-        i < pixels.length;
-        i += 4
-    ) {
-
-        const r =
-            pixels[i];
-
-
-        const g =
-            pixels[i + 1];
-
-
-        const b =
-            pixels[i + 2];
-
-
-        const a =
-            pixels[i + 3];
-
-
-        if (
-            a !== 255
-        ) {
-
-            throw new Error(
-                "Image contains transparency."
-            );
-
-        }
-
-
-        const colour =
-            (
-                (r << 16) |
-                (g << 8) |
-                b
-            ) >>> 0;
-
-
-        frequency.set(
-            colour,
-            (
-                frequency.get(
-                    colour
-                ) || 0
-            ) + 1
-        );
-
-    }
-
-
-    const colours =
-        Array.from(
-            frequency.keys()
-        );
-
-
-    /*
-     * We require a genuine four-shade image.
-     */
-    if (
-        colours.length > 4
-    ) {
-
-        throw new Error(
-            "This image contains " +
-            colours.length +
-            " colours.\n\n" +
-            "For lossless GBC3 encoding, the image " +
-            "must contain four colours or fewer."
-        );
-
-    }
-
-
-    /*
-     * Most common first.
-     */
-    colours.sort(
-        (a, b) =>
-            frequency.get(b) -
-            frequency.get(a)
-    );
-
-
-    const colourMap =
-        new Map();
-
-
-    for (
-        let i = 0;
-        i < colours.length;
-        i++
-    ) {
-
-        colourMap.set(
-            colours[i],
-            i
-        );
-
-    }
-
-
-    /*
-     * Pad palette.
-     */
-    while (
-        colours.length < 4
-    ) {
-
-        colours.push(
-            colours.length > 0
-                ? colours[
-                    colours.length - 1
-                ]
-                : 0
-        );
-
-    }
-
-
-    /*
-     * Convert every pixel to a 2-bit shade.
-     */
-    const shadePixels =
-        new Uint8Array(
-            width *
-            height
-        );
-
-
-    for (
-        let i = 0;
-        i < width * height;
-        i++
-    ) {
-
-        const offset =
-            i * 4;
-
-
-        const colour =
-            (
-                (pixels[offset] << 16) |
-                (pixels[offset + 1] << 8) |
-                pixels[offset + 2]
-            ) >>> 0;
-
-
-        shadePixels[i] =
-            colourMap.get(
-                colour
-            );
-
-    }
-
-
-    return {
-        pixels: shadePixels,
-        palette: colours
-    };
-
-}
-
-
-/*
-============================================================
-ENCODE GBC3
-============================================================
-*/
-
-async function encodeGBC3(
-    imageData,
-    width,
-    height
-) {
-
-    const converted =
-        convertToFourShades(
-            imageData,
-            width,
-            height
-        );
-
-
-    const pixels =
-        converted.pixels;
-
-
-    const palette =
-        converted.palette;
-
-
-    /*
-     * Build rows.
-     */
-    const rows = [];
-
-
-    for (
-        let y = 0;
-        y < height;
-        y++
-    ) {
-
-        rows.push(
-            pixels.subarray(
-                y * width,
-                (
-                    y + 1
-                ) * width
-            )
-        );
-
-    }
-
-
-    /*
-     * Adaptive row stream.
-     */
-    const rowData =
-        createGBC3Rows(
-            rows,
-            width
-        );
-
-
-    /*
-     * Header + row stream.
-     */
-    const raw =
-        createGBC3Raw(
-            width,
-            height,
-            palette,
-            rowData
-        );
-
-
-    /*
-     * DEFLATE.
-     */
-    const compressed =
-        await deflate(
-            raw
-        );
-
-
-    /*
-     * Create URL.
-     */
-    const encoded =
-        GBC3_MAGIC +
-        "/" +
-        bytesToBase64Url(
-            compressed
-        );
-
-
-    /*
-     * Return some useful diagnostics.
-     */
-    return {
-        encoded,
-        rawSize: raw.length,
-        compressedSize: compressed.length
-    };
-
-}
-
-
-/*
-============================================================
-DECODE GBC3
-============================================================
-*/
-
-async function decodeGBC3(
+async function loadGBC3(
     encoded
 ) {
-
-    if (
-        !encoded.startsWith(
-            GBC3_MAGIC + "/"
-        )
-    ) {
-
-        throw new Error(
-            "Invalid GBC3 image."
-        );
-
-    }
-
 
     const compressed =
         base64UrlToBytes(
@@ -1441,8 +1882,7 @@ async function decodeGBC3(
 
 
     if (
-        raw[0] !==
-        GBC_VERSION
+        raw[0] !== 3
     ) {
 
         throw new Error(
@@ -1452,9 +1892,6 @@ async function decodeGBC3(
     }
 
 
-    /*
-     * Dimensions.
-     */
     const dimensionCode =
         raw[1];
 
@@ -1467,22 +1904,16 @@ async function decodeGBC3(
         dimensionCode === 0
     ) {
 
-        width =
-            128;
-
-        height =
-            112;
+        width = 128;
+        height = 112;
 
     }
     else if (
         dimensionCode === 1
     ) {
 
-        width =
-            160;
-
-        height =
-            144;
+        width = 160;
+        height = 144;
 
     }
     else {
@@ -1494,9 +1925,6 @@ async function decodeGBC3(
     }
 
 
-    /*
-     * Palette.
-     */
     const palette =
         raw.subarray(
             2,
@@ -1504,9 +1932,6 @@ async function decodeGBC3(
         );
 
 
-    /*
-     * Output pixels.
-     */
     const pixels =
         new Uint8Array(
             width *
@@ -1522,9 +1947,6 @@ async function decodeGBC3(
         null;
 
 
-    /*
-     * Decode every row.
-     */
     for (
         let y = 0;
         y < height;
@@ -1546,11 +1968,6 @@ async function decodeGBC3(
             raw[offset++];
 
 
-        /*
-         * ----------------------------------------------------
-         * RLE
-         * ----------------------------------------------------
-         */
         if (
             mode === 0
         ) {
@@ -1578,12 +1995,6 @@ async function decodeGBC3(
 
         }
 
-
-        /*
-         * ----------------------------------------------------
-         * PACKED
-         * ----------------------------------------------------
-         */
         else if (
             mode === 1
         ) {
@@ -1601,7 +2012,7 @@ async function decodeGBC3(
             ) {
 
                 throw new Error(
-                    "Unexpected end of packed GBC3 row."
+                    "Unexpected end of GBC3 packed row."
                 );
 
             }
@@ -1637,12 +2048,6 @@ async function decodeGBC3(
 
         }
 
-
-        /*
-         * ----------------------------------------------------
-         * REPEAT PREVIOUS ROW
-         * ----------------------------------------------------
-         */
         else if (
             mode === 2
         ) {
@@ -1665,12 +2070,10 @@ async function decodeGBC3(
 
         }
 
-
         else {
 
             throw new Error(
-                "Unknown GBC3 row mode: " +
-                mode
+                "Unknown GBC3 row mode."
             );
 
         }
@@ -1678,9 +2081,6 @@ async function decodeGBC3(
     }
 
 
-    /*
-     * Create display canvas.
-     */
     const canvas =
         document.createElement(
             "canvas"
@@ -1708,9 +2108,6 @@ async function decodeGBC3(
         );
 
 
-    /*
-     * Convert 2-bit pixels back into RGB.
-     */
     for (
         let i = 0;
         i < pixels.length;
@@ -1768,85 +2165,6 @@ async function decodeGBC3(
     );
 
 
-    return canvas;
-
-}
-
-
-/*
-============================================================
-DISPLAY CANVAS
-============================================================
-*/
-
-function displayCanvas(
-    canvas
-) {
-
-    /*
-     * PNG is created only in memory for display.
-     *
-     * It is NOT placed in the URL.
-     */
-    const imageUrl =
-        canvas.toDataURL(
-            "image/png"
-        );
-
-
-    photo.onload =
-        function () {
-
-            upload.style.display =
-                "none";
-
-
-            photo.style.display =
-                "block";
-
-        };
-
-
-    photo.onerror =
-        function () {
-
-            upload.style.display =
-                "none";
-
-
-            photo.style.display =
-                "none";
-
-
-            showError(
-                "Could not display image."
-            );
-
-        };
-
-
-    photo.src =
-        imageUrl;
-
-}
-
-
-/*
-============================================================
-LOAD GBC3
-============================================================
-*/
-
-async function loadGBC3(
-    encoded
-) {
-
-    const canvas =
-        await decodeGBC3(
-            encoded
-        );
-
-
     displayCanvas(
         canvas
     );
@@ -1856,7 +2174,7 @@ async function loadGBC3(
 
 /*
 ============================================================
-LEGACY GBC1 LOADER
+GBC1 DECODER
 ============================================================
 */
 
@@ -1864,10 +2182,6 @@ async function loadGBC1(
     encoded
 ) {
 
-    /*
-     * This decoder is compatible with the GBC1
-     * format from the previous version.
-     */
     const compressed =
         base64UrlToBytes(
             encoded.substring(
@@ -1960,9 +2274,6 @@ async function loadGBC1(
         );
 
 
-    /*
-     * GBC1 XOR decode.
-     */
     function xorDecode(
         bytes
     ) {
@@ -1999,9 +2310,6 @@ async function loadGBC1(
     }
 
 
-    /*
-     * GBC1 RLE decode.
-     */
     function rleDecode(
         bytes
     ) {
@@ -2075,6 +2383,7 @@ async function loadGBC1(
                 );
 
             }
+
             else {
 
                 for (
@@ -2111,6 +2420,7 @@ async function loadGBC1(
             );
 
     }
+
     else if (
         codec === 2
     ) {
@@ -2123,6 +2433,7 @@ async function loadGBC1(
             );
 
     }
+
     else if (
         codec !== 0
     ) {
@@ -2271,7 +2582,7 @@ async function loadGBC1(
 
 /*
 ============================================================
-LEGACY PNG BASE64 LOADER
+LEGACY PNG
 ============================================================
 */
 
@@ -2310,14 +2621,6 @@ function loadLegacyPNG(
     photo.onerror =
         function () {
 
-            upload.style.display =
-                "none";
-
-
-            photo.style.display =
-                "none";
-
-
             showError(
                 "The image data in this URL could not be decoded."
             );
@@ -2334,7 +2637,7 @@ function loadLegacyPNG(
 
 /*
 ============================================================
-LOAD IMAGE FROM HASH
+LOAD HASH
 ============================================================
 */
 
@@ -2367,9 +2670,22 @@ async function loadImageFromHash() {
 
     try {
 
-        /*
-         * GBC3
-         */
+        if (
+            encoded.startsWith(
+                GBC4_MAGIC + "/"
+            )
+        ) {
+
+            await loadGBC4(
+                encoded
+            );
+
+
+            return;
+
+        }
+
+
         if (
             encoded.startsWith(
                 GBC3_MAGIC + "/"
@@ -2386,9 +2702,6 @@ async function loadImageFromHash() {
         }
 
 
-        /*
-         * GBC1
-         */
         if (
             encoded.startsWith(
                 GBC1_MAGIC + "/"
@@ -2405,14 +2718,12 @@ async function loadImageFromHash() {
         }
 
 
-        /*
-         * Old PNG/Base64 URL.
-         */
         loadLegacyPNG(
             encoded
         );
 
     }
+
     catch (error) {
 
         console.error(
@@ -2440,7 +2751,7 @@ async function loadImageFromHash() {
 
 /*
 ============================================================
-UPLOAD IMAGE
+UPLOAD
 ============================================================
 */
 
@@ -2476,135 +2787,64 @@ fileInput.addEventListener(
                         try {
 
                             /*
-                             * Only accept native GBC
-                             * dimensions.
-                             */
-                            const width =
-                                image.naturalWidth;
-
-
-                            const height =
-                                image.naturalHeight;
-
-
-                            if (
-                                !(
-                                    (
-                                        width === 128 &&
-                                        height === 112
-                                    ) ||
-                                    (
-                                        width === 160 &&
-                                        height === 144
-                                    )
-                                )
-                            ) {
-
-                                throw new Error(
-                                    "Game Boy Camera images must be " +
-                                    "128×112 or 160×144 pixels."
-                                );
-
-                            }
-
-
-                            /*
-                             * Canvas.
-                             */
-                            const canvas =
-                                document.createElement(
-                                    "canvas"
-                                );
-
-
-                            canvas.width =
-                                width;
-
-
-                            canvas.height =
-                                height;
-
-
-                            const ctx =
-                                canvas.getContext(
-                                    "2d"
-                                );
-
-
-                            ctx.imageSmoothingEnabled =
-                                false;
-
-
-                            ctx.drawImage(
-                                image,
-                                0,
-                                0,
-                                width,
-                                height
-                            );
-
-
-                            /*
-                             * Exact source pixels.
-                             */
-                            const imageData =
-                                ctx.getImageData(
-                                    0,
-                                    0,
-                                    width,
-                                    height
-                                );
-
-
-                            /*
-                             * Encode GBC3.
-                             */
-                            const result =
-                                await encodeGBC3(
-                                    imageData,
-                                    width,
-                                    height
-                                );
-
-
-                            /*
-                             * Update hash.
+                             * Encode as GBC4.
                              *
-                             * This automatically causes a
-                             * hashchange event.
+                             * Unlike GBC3, arbitrary photographic
+                             * source images are accepted.
+                             */
+
+                            const result =
+                                await encodeGBC4(
+                                    image
+                                );
+
+
+                            /*
+                             * Put encoded image in hash.
                              */
                             window.location.hash =
                                 result.encoded;
 
 
                             /*
-                             * Load immediately.
-                             *
-                             * No refresh required.
+                             * Display immediately.
                              */
                             await loadImageFromHash();
 
 
-                            /*
-                             * Log compression information
-                             * for testing.
-                             */
                             console.log(
-                                "GBC3 raw:",
-                                result.rawSize,
-                                "bytes"
+                                "--------------------------------"
                             );
 
 
                             console.log(
-                                "GBC3 compressed:",
+                                "GBC4 RESULT"
+                            );
+
+
+                            console.log(
+                                "Resolution:",
+                                result.width +
+                                "×" +
+                                result.height
+                            );
+
+
+                            console.log(
+                                "Mode:",
+                                result.mode
+                            );
+
+
+                            console.log(
+                                "Compressed:",
                                 result.compressedSize,
                                 "bytes"
                             );
 
 
                             console.log(
-                                "GBC3 URL:",
+                                "Hash:",
                                 result.encoded.length,
                                 "characters"
                             );
@@ -2616,7 +2856,13 @@ fileInput.addEventListener(
                                 "characters"
                             );
 
+
+                            console.log(
+                                "--------------------------------"
+                            );
+
                         }
+
                         catch (error) {
 
                             console.error(
@@ -2626,7 +2872,7 @@ fileInput.addEventListener(
 
                             showError(
                                 error.message ||
-                                "Could not encode Game Boy Camera image."
+                                "Could not encode image."
                             );
 
                         }
@@ -2670,7 +2916,7 @@ fileInput.addEventListener(
 
 /*
 ============================================================
-BROWSER BACK / FORWARD
+HASH CHANGE
 ============================================================
 */
 
@@ -2686,7 +2932,7 @@ window.addEventListener(
 
 /*
 ============================================================
-CLICK IMAGE → COPY URL
+COPY URL
 ============================================================
 */
 
@@ -2720,6 +2966,7 @@ photo.addEventListener(
             );
 
         }
+
         catch (error) {
 
             const textarea =
@@ -2770,6 +3017,7 @@ photo.addEventListener(
                 );
 
             }
+
             catch (e) {
 
                 showError(
