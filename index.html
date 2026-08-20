@@ -21,6 +21,7 @@
     box-sizing: border-box;
 }
 
+
 html,
 body {
 
@@ -35,6 +36,7 @@ body {
 
 }
 
+
 body {
 
     display: flex;
@@ -47,7 +49,7 @@ body {
 
 /*
 ============================================================
-IMAGE
+IMAGE VIEWER
 ============================================================
 */
 
@@ -82,7 +84,7 @@ IMAGE
 
 /*
 ============================================================
-UPLOAD
+UPLOAD SCREEN
 ============================================================
 */
 
@@ -105,6 +107,7 @@ UPLOAD
 
 }
 
+
 #upload label {
 
     display: inline-block;
@@ -123,11 +126,13 @@ UPLOAD
 
 }
 
+
 #upload label:hover {
 
     background: #333;
 
 }
+
 
 #file {
 
@@ -144,34 +149,15 @@ STATUS
 
 #status {
 
-    position: fixed;
-
-    left: 50%;
-    top: 20px;
-
-    transform:
-        translateX(-50%);
-
-    max-width: 90vw;
-
-    padding: 9px 14px;
-
-    background:
-        rgba(0,0,0,0.85);
-
-    color: #fff;
+    color: #aaa;
 
     font-family: monospace;
 
     font-size: 12px;
 
-    border-radius: 6px;
+    max-width: 90vw;
 
     text-align: center;
-
-    display: none;
-
-    z-index: 20;
 
 }
 
@@ -199,7 +185,7 @@ ERROR
     padding: 10px 15px;
 
     background:
-        rgba(150,0,0,0.9);
+        rgba(150, 0, 0, 0.9);
 
     color: white;
 
@@ -211,7 +197,7 @@ ERROR
 
     text-align: center;
 
-    z-index: 30;
+    z-index: 10;
 
 }
 
@@ -237,7 +223,7 @@ COPIED
     padding: 10px 15px;
 
     background:
-        rgba(0,0,0,0.85);
+        rgba(0, 0, 0, 0.85);
 
     color: white;
 
@@ -247,7 +233,7 @@ COPIED
 
     border-radius: 6px;
 
-    z-index: 20;
+    z-index: 10;
 
 }
 
@@ -271,6 +257,8 @@ COPIED
         accept="image/png,image/jpeg,image/webp,image/gif"
     >
 
+    <div id="status"></div>
+
 </div>
 
 
@@ -280,9 +268,8 @@ COPIED
 >
 
 
-<div id="status"></div>
-
 <div id="error"></div>
+
 
 <div id="copied">
     URL copied!
@@ -296,38 +283,82 @@ COPIED
 #
 # GBC4
 #
-# GAME BOY CAMERA DISCORD FORMAT
+# GAME BOY CAMERA ADAPTIVE DISCORD FORMAT
 #
 ################################################################
 #
-# GBC4 deliberately uses a different strategy from GBC1/2/3.
+# Main goal:
 #
-# GBC1/2/3:
-#
-#     lossless pixel encoding
-#
-# GBC4:
-#
-#     grayscale
-#         ↓
-#     optional downsampling
-#         ↓
-#     WebP lossy compression
-#         ↓
-#     Base64URL
+#   MAXIMUM VISUAL QUALITY
+#   subject to a maximum URL length.
 #
 #
-# The encoder automatically searches for the best image which
-# fits inside MAX_URL_LENGTH.
+# GBC4 stores:
 #
-################################################################
+#   WebP image
+#       ↓
+#   Base64URL
+#       ↓
+#   #GBC4/
 #
-# URL:
 #
-#     #GBC4/<base64url WebP>
+# The encoder automatically tests many combinations of:
+#
+#   • resolution
+#   • WebP quality
+#
+# and chooses the best candidate that fits the URL limit.
+#
+#
+# Older formats remain readable:
+#
+#   GBC1
+#   GBC2
+#   GBC3
+#   legacy PNG/Base64
 #
 ################################################################
 */
+
+
+/*
+============================================================
+GBC4 SETTINGS
+============================================================
+*/
+
+
+/*
+ * Discord's commonly encountered URL limit is around
+ * 2000 characters.
+ *
+ * We deliberately target 1900 characters to leave room
+ * for safety.
+ *
+ * Change this to 1950 or 2000 if desired.
+ */
+const MAX_COMPLETE_URL_LENGTH =
+    1900;
+
+
+/*
+ * Minimum dimensions we are willing to use.
+ *
+ * We deliberately do NOT immediately destroy the image
+ * when the full-size version does not fit.
+ */
+const MIN_WIDTH =
+    80;
+
+const MIN_HEIGHT =
+    70;
+
+
+/*
+ * GBC4 magic.
+ */
+const GBC4_MAGIC =
+    "GBC4";
 
 
 const GBC1_MAGIC =
@@ -340,14 +371,6 @@ const GBC2_MAGIC =
 
 const GBC3_MAGIC =
     "GBC3";
-
-
-const GBC4_MAGIC =
-    "GBC4";
-
-
-const GBC4_MAX_URL_LENGTH =
-    2000;
 
 
 /*
@@ -394,31 +417,6 @@ const statusBox =
 
 /*
 ============================================================
-STATUS
-============================================================
-*/
-
-function showStatus(message) {
-
-    statusBox.textContent =
-        message;
-
-    statusBox.style.display =
-        "block";
-
-}
-
-
-function hideStatus() {
-
-    statusBox.style.display =
-        "none";
-
-}
-
-
-/*
-============================================================
 ERROR
 ============================================================
 */
@@ -434,17 +432,23 @@ function showError(message) {
 }
 
 
-function hideError() {
+/*
+============================================================
+STATUS
+============================================================
+*/
 
-    errorBox.style.display =
-        "none";
+function setStatus(message) {
+
+    statusBox.textContent =
+        message;
 
 }
 
 
 /*
 ============================================================
-BASE64URL
+BASE64URL ENCODE
 ============================================================
 */
 
@@ -540,14 +544,44 @@ function base64UrlToBytes(string) {
 
 /*
 ============================================================
-BLOB → BYTES
+DEFLATE
 ============================================================
 */
 
-async function blobToBytes(blob) {
+/*
+ * Kept for GBC1/GBC2/GBC3 compatibility.
+ */
+
+async function inflate(bytes) {
+
+    if (
+        !("DecompressionStream" in window)
+    ) {
+
+        throw new Error(
+            "This browser does not support decompression."
+        );
+
+    }
+
+
+    const stream =
+        new Blob([bytes])
+            .stream()
+            .pipeThrough(
+                new DecompressionStream(
+                    "deflate"
+                )
+            );
+
+
+    const buffer =
+        await new Response(stream)
+            .arrayBuffer();
+
 
     return new Uint8Array(
-        await blob.arrayBuffer()
+        buffer
     );
 
 }
@@ -555,43 +589,42 @@ async function blobToBytes(blob) {
 
 /*
 ============================================================
-BLOB → DATA URL
+GBC4 WEBP ENCODER
 ============================================================
 */
 
-function blobToDataURL(blob) {
+function canvasToWebP(
+    canvas,
+    quality
+) {
 
     return new Promise(
-        function(resolve, reject) {
+        function (
+            resolve,
+            reject
+        ) {
 
-            const reader =
-                new FileReader();
+            canvas.toBlob(
+                function (blob) {
 
+                    if (!blob) {
 
-            reader.onload =
-                function() {
+                        reject(
+                            new Error(
+                                "This browser could not create WebP."
+                            )
+                        );
 
-                    resolve(
-                        reader.result
-                    );
+                        return;
 
-                };
-
-
-            reader.onerror =
-                function() {
-
-                    reject(
-                        new Error(
-                            "Could not read image data."
-                        )
-                    );
-
-                };
+                    }
 
 
-            reader.readAsDataURL(
-                blob
+                    resolve(blob);
+
+                },
+                "image/webp",
+                quality
             );
 
         }
@@ -602,50 +635,37 @@ function blobToDataURL(blob) {
 
 /*
 ============================================================
-WEBP SUPPORT
+BLOB → UINT8ARRAY
 ============================================================
 */
 
-function supportsWebP() {
+async function blobToBytes(
+    blob
+) {
 
-    const canvas =
-        document.createElement(
-            "canvas"
-        );
-
-
-    if (
-        !canvas.toDataURL
-    ) {
-
-        return false;
-
-    }
-
-
-    return canvas
-        .toDataURL(
-            "image/webp"
-        )
-        .startsWith(
-            "data:image/webp"
-        );
+    return new Uint8Array(
+        await blob.arrayBuffer()
+    );
 
 }
 
 
 /*
 ============================================================
-CREATE GBC4 IMAGE
+GBC4 CANDIDATE
 ============================================================
 */
 
-function createGBC4Canvas(
-    source,
+async function createGBC4Candidate(
+    sourceCanvas,
     width,
-    height
+    height,
+    quality
 ) {
 
+    /*
+     * Create candidate canvas.
+     */
     const canvas =
         document.createElement(
             "canvas"
@@ -667,17 +687,19 @@ function createGBC4Canvas(
 
 
     /*
-     * Disable interpolation.
+     * For normal GBC-sized images, pixel-perfect
+     * scaling is preferable.
+     *
+     * When reducing resolution, a small amount of
+     * smoothing is useful because it prevents the
+     * dither pattern from turning into huge blocks.
      */
     ctx.imageSmoothingEnabled =
-        false;
+        width < sourceCanvas.width;
 
 
-    /*
-     * Draw source.
-     */
     ctx.drawImage(
-        source,
+        sourceCanvas,
         0,
         0,
         width,
@@ -686,139 +708,10 @@ function createGBC4Canvas(
 
 
     /*
-     * Convert to grayscale.
-     *
-     * We use luminance rather than simply one
-     * RGB channel.
-     */
-    const imageData =
-        ctx.getImageData(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-    const data =
-        imageData.data;
-
-
-    for (
-        let i = 0;
-        i < data.length;
-        i += 4
-    ) {
-
-        const r =
-            data[i];
-
-
-        const g =
-            data[i + 1];
-
-
-        const b =
-            data[i + 2];
-
-
-        /*
-         * Standard perceptual luminance.
-         */
-        const grey =
-            Math.round(
-                0.299 * r +
-                0.587 * g +
-                0.114 * b
-            );
-
-
-        data[i] =
-            grey;
-
-
-        data[i + 1] =
-            grey;
-
-
-        data[i + 2] =
-            grey;
-
-
-        data[i + 3] =
-            255;
-
-    }
-
-
-    ctx.putImageData(
-        imageData,
-        0,
-        0
-    );
-
-
-    return canvas;
-
-}
-
-
-/*
-============================================================
-ENCODE WEBP
-============================================================
-*/
-
-async function encodeWebP(
-    canvas,
-    quality
-) {
-
-    /*
-     * Prefer toBlob because it gives us the actual
-     * compressed binary size.
+     * Encode as WebP.
      */
     const blob =
-        await new Promise(
-            function(resolve) {
-
-                canvas.toBlob(
-                    resolve,
-                    "image/webp",
-                    quality
-                );
-
-            }
-        );
-
-
-    if (!blob) {
-
-        throw new Error(
-            "This browser could not create a WebP image."
-        );
-
-    }
-
-
-    return blob;
-
-}
-
-
-/*
-============================================================
-CREATE GBC4 URL
-============================================================
-*/
-
-async function makeGBC4URL(
-    canvas,
-    quality
-) {
-
-    const blob =
-        await encodeWebP(
+        await canvasToWebP(
             canvas,
             quality
         );
@@ -842,39 +735,13 @@ async function makeGBC4URL(
         base64;
 
 
-    /*
-     * IMPORTANT:
-     *
-     * Measure the complete URL, not just the payload.
-     */
-    const completeURL =
-        window.location.origin +
-        window.location.pathname +
-        "#" +
-        encoded;
-
-
     return {
-
         encoded,
-
-        url:
-            completeURL,
-
-        urlLength:
-            completeURL.length,
-
-        compressedBytes:
-            blob.size,
-
-        width:
-            canvas.width,
-
-        height:
-            canvas.height,
-
-        quality
-
+        width,
+        height,
+        quality,
+        bytes: bytes.length,
+        canvas
     };
 
 }
@@ -882,232 +749,54 @@ async function makeGBC4URL(
 
 /*
 ============================================================
-MAKE RESIZED CANVAS
+GENERATE DIMENSION CANDIDATES
 ============================================================
 */
 
-function resizeCanvas(
-    source,
-    width,
-    height
-) {
-
-    const canvas =
-        document.createElement(
-            "canvas"
-        );
-
-
-    canvas.width =
-        width;
-
-
-    canvas.height =
-        height;
-
-
-    const ctx =
-        canvas.getContext(
-            "2d"
-        );
-
-
-    /*
-     * For downsampling we WANT smoothing.
-     *
-     * WebP will then compress the photographic
-     * structure instead of preserving individual
-     * Game Boy dither pixels.
-     */
-    ctx.imageSmoothingEnabled =
-        true;
-
-
-    ctx.imageSmoothingQuality =
-        "high";
-
-
-    ctx.drawImage(
-        source,
-        0,
-        0,
-        width,
-        height
-    );
-
-
-    /*
-     * Convert to grayscale after resizing.
-     */
-    const imageData =
-        ctx.getImageData(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-    const data =
-        imageData.data;
-
-
-    for (
-        let i = 0;
-        i < data.length;
-        i += 4
-    ) {
-
-        const grey =
-            Math.round(
-                0.299 * data[i] +
-                0.587 * data[i + 1] +
-                0.114 * data[i + 2]
-            );
-
-
-        data[i] =
-            grey;
-
-
-        data[i + 1] =
-            grey;
-
-
-        data[i + 2] =
-            grey;
-
-
-        data[i + 3] =
-            255;
-
-    }
-
-
-    ctx.putImageData(
-        imageData,
-        0,
-        0
-    );
-
-
-    return canvas;
-
-}
-
-
-/*
-============================================================
-GBC4 ADAPTIVE ENCODER
-============================================================
-*/
-
-async function encodeGBC4(
-    source,
+function generateDimensions(
     sourceWidth,
     sourceHeight
 ) {
 
-    if (
-        !supportsWebP()
-    ) {
-
-        throw new Error(
-            "This browser does not support WebP."
-        );
-
-    }
+    const candidates = [];
 
 
     /*
-     * --------------------------------------------------------
-     * TARGET
-     * --------------------------------------------------------
-     *
-     * We want the largest possible image while keeping the
-     * COMPLETE URL at or below 2000 characters.
-     *
-     * The search is ordered from highest quality/resolution
-     * to lower quality/resolution.
+     * Always try the original resolution first.
      */
-    const scaleFactors = [
-
+    const scales = [
         1.00,
+        0.95,
         0.90,
+        0.85,
         0.80,
         0.75,
-        0.67,
+        0.70,
+        0.65,
         0.60,
+        0.55,
         0.50,
         0.45,
         0.40,
         0.35,
-        0.33,
         0.30,
-        0.25,
-        0.20,
-        0.1667,
-        0.15,
-        0.125
-
+        0.25
     ];
 
-
-    /*
-     * Higher qualities first.
-     *
-     * Because we are searching several resolutions,
-     * we can afford to use relatively high WebP quality
-     * before reducing the resolution.
-     */
-    const qualities = [
-
-        0.90,
-        0.82,
-        0.75,
-        0.68,
-        0.60,
-        0.52,
-        0.45,
-        0.38,
-        0.32,
-        0.26,
-        0.20
-
-    ];
-
-
-    let best =
-        null;
-
-
-    /*
-     * --------------------------------------------------------
-     * SEARCH
-     * --------------------------------------------------------
-     */
 
     for (
-        const scale of scaleFactors
+        const scale of scales
     ) {
 
         let width =
-            Math.max(
-                1,
-                Math.round(
-                    sourceWidth *
-                    scale
-                )
+            Math.round(
+                sourceWidth * scale
             );
 
 
         let height =
-            Math.max(
-                1,
-                Math.round(
-                    sourceHeight *
-                    scale
-                )
+            Math.round(
+                sourceHeight * scale
             );
 
 
@@ -1123,8 +812,8 @@ async function encodeGBC4(
 
 
         if (
-            width < 2 ||
-            height < 2
+            width < MIN_WIDTH ||
+            height < MIN_HEIGHT
         ) {
 
             continue;
@@ -1132,113 +821,218 @@ async function encodeGBC4(
         }
 
 
-        const canvas =
-            resizeCanvas(
-                source,
-                width,
-                height
+        const exists =
+            candidates.some(
+                function (candidate) {
+
+                    return (
+                        candidate.width === width &&
+                        candidate.height === height
+                    );
+
+                }
             );
 
+
+        if (!exists) {
+
+            candidates.push({
+                width,
+                height,
+                scale
+            });
+
+        }
+
+    }
+
+
+    return candidates;
+
+}
+
+
+/*
+============================================================
+QUALITY CANDIDATES
+============================================================
+*/
+
+function generateQualityCandidates() {
+
+    /*
+     * High quality is deliberately tried first.
+     *
+     * The encoder therefore keeps quality as high
+     * as possible before sacrificing resolution.
+     */
+    return [
+        0.95,
+        0.90,
+        0.88,
+        0.86,
+        0.84,
+        0.82,
+        0.80,
+        0.78,
+        0.76,
+        0.74,
+        0.72,
+        0.70,
+        0.68,
+        0.65,
+        0.62,
+        0.60,
+        0.57,
+        0.54,
+        0.50
+    ];
+
+}
+
+
+/*
+============================================================
+SELECT BEST GBC4 IMAGE
+============================================================
+*/
+
+async function encodeGBC4(
+    sourceCanvas
+) {
+
+    const sourceWidth =
+        sourceCanvas.width;
+
+
+    const sourceHeight =
+        sourceCanvas.height;
+
+
+    /*
+     * The hash occupies part of the complete URL.
+     *
+     * Estimate the current page URL without the hash.
+     */
+    const baseUrl =
+        window.location.href
+            .split("#")[0];
+
+
+    const maxHashLength =
+        Math.max(
+            100,
+            MAX_COMPLETE_URL_LENGTH -
+            baseUrl.length -
+            1
+        );
+
+
+    const dimensions =
+        generateDimensions(
+            sourceWidth,
+            sourceHeight
+        );
+
+
+    const qualities =
+        generateQualityCandidates();
+
+
+    let best =
+        null;
+
+
+    let tested =
+        0;
+
+
+    /*
+     * IMPORTANT:
+     *
+     * We iterate resolution from largest to smallest.
+     *
+     * Within each resolution we iterate quality from
+     * highest to lowest.
+     *
+     * Therefore the first fitting candidate at a
+     * resolution is the highest quality available
+     * at that resolution.
+     */
+    for (
+        const dimension of dimensions
+    ) {
 
         for (
             const quality of qualities
         ) {
 
-            const result =
-                await makeGBC4URL(
-                    canvas,
+            tested++;
+
+
+            setStatus(
+                "Optimising image… " +
+                dimension.width +
+                "×" +
+                dimension.height +
+                " @ " +
+                Math.round(
+                    quality * 100
+                ) +
+                "%"
+            );
+
+
+            const candidate =
+                await createGBC4Candidate(
+                    sourceCanvas,
+                    dimension.width,
+                    dimension.height,
                     quality
                 );
 
 
             /*
-             * Record the smallest result even if it
-             * doesn't meet the target.
+             * Hash length.
              */
-            if (
-                best === null ||
-                result.urlLength <
-                    best.urlLength
-            ) {
-
-                best =
-                    result;
-
-            }
+            const hashLength =
+                candidate.encoded.length;
 
 
             /*
-             * SUCCESS.
+             * Fits.
              */
             if (
-                result.urlLength <=
-                GBC4_MAX_URL_LENGTH
+                hashLength <=
+                maxHashLength
             ) {
 
-                /*
-                 * We deliberately keep searching through
-                 * the quality values for this resolution.
-                 *
-                 * Once the image fits, lower quality is not
-                 * automatically better.
-                 *
-                 * We want the HIGHEST quality that fits.
-                 */
-                let bestAtThisResolution =
-                    result;
-
-
-                for (
-                    const betterQuality of qualities
-                ) {
-
-                    if (
-                        betterQuality <=
-                        quality
-                    ) {
-
-                        continue;
-
-                    }
-
-
-                    const better =
-                        await makeGBC4URL(
-                            canvas,
-                            betterQuality
-                        );
-
-
-                    if (
-                        better.urlLength <=
-                        GBC4_MAX_URL_LENGTH
-                    ) {
-
-                        if (
-                            better.urlLength >
-                                bestAtThisResolution.urlLength
-                        ) {
-
-                            bestAtThisResolution =
-                                better;
-
-                        }
-
-                    }
-
-                }
+                best =
+                    candidate;
 
 
                 /*
-                 * This resolution fits.
+                 * We can stop searching this resolution.
                  *
-                 * Because resolutions are searched from
-                 * largest to smallest, this is the largest
-                 * resolution we have found that can fit.
+                 * This is the highest quality candidate
+                 * at this resolution that fits.
                  */
-                return bestAtThisResolution;
+                break;
 
             }
+
+        }
+
+
+        /*
+         * If we found a fitting candidate at the
+         * largest possible resolution, stop.
+         */
+        if (
+            best !== null
+        ) {
+
+            break;
 
         }
 
@@ -1246,23 +1040,43 @@ async function encodeGBC4(
 
 
     /*
-     * Nothing fitted.
+     * Nothing fit.
      *
-     * This should only happen for an unusually long
-     * page URL or an extremely unusual browser.
+     * This should be extremely unlikely, but provide
+     * a clear error instead of producing a terrible
+     * image.
      */
-    throw new Error(
-        "Could not create a GBC4 image below " +
-        GBC4_MAX_URL_LENGTH +
-        " characters.\n\n" +
-        "Smallest result was " +
-        (
-            best
-                ? best.urlLength
-                : "unknown"
-        ) +
-        " characters."
-    );
+    if (
+        best === null
+    ) {
+
+        throw new Error(
+            "Could not fit this image inside the " +
+            MAX_COMPLETE_URL_LENGTH +
+            "-character URL limit."
+        );
+
+    }
+
+
+    /*
+     * Diagnostics.
+     */
+    best.tested =
+        tested;
+
+
+    best.maxHashLength =
+        maxHashLength;
+
+
+    best.completeUrlLength =
+        baseUrl.length +
+        1 +
+        best.encoded.length;
+
+
+    return best;
 
 }
 
@@ -1284,10 +1098,11 @@ function displayCanvas(
 
 
     photo.onload =
-        function() {
+        function () {
 
             upload.style.display =
                 "none";
+
 
             photo.style.display =
                 "block";
@@ -1296,13 +1111,15 @@ function displayCanvas(
 
 
     photo.onerror =
-        function() {
+        function () {
 
             upload.style.display =
                 "none";
 
+
             photo.style.display =
                 "none";
+
 
             showError(
                 "Could not display image."
@@ -1319,65 +1136,7 @@ function displayCanvas(
 
 /*
 ============================================================
-DISPLAY BLOB
-============================================================
-*/
-
-function displayBlob(
-    blob
-) {
-
-    const url =
-        URL.createObjectURL(
-            blob
-        );
-
-
-    photo.onload =
-        function() {
-
-            upload.style.display =
-                "none";
-
-            photo.style.display =
-                "block";
-
-            URL.revokeObjectURL(
-                url
-            );
-
-        };
-
-
-    photo.onerror =
-        function() {
-
-            upload.style.display =
-                "none";
-
-            photo.style.display =
-                "none";
-
-            URL.revokeObjectURL(
-                url
-            );
-
-            showError(
-                "Could not display GBC4 image."
-            );
-
-        };
-
-
-    photo.src =
-        url;
-
-}
-
-
-/*
-============================================================
-DECODE GBC4
+LOAD GBC4
 ============================================================
 */
 
@@ -1411,343 +1170,59 @@ async function loadGBC4(
 
 
     /*
-     * WebP is self-describing.
-     *
-     * No custom GBC4 header is required.
+     * WebP can be decoded directly by the browser.
      */
     const blob =
         new Blob(
             [bytes],
             {
-                type:
-                    "image/webp"
+                type: "image/webp"
             }
         );
 
 
-    displayBlob(
-        blob
-    );
-
-}
-
-
-/*
-============================================================
-GBC1 DECODER
-============================================================
-*/
-
-async function loadGBC1(
-    encoded
-) {
-
-    const compressed =
-        base64UrlToBytes(
-            encoded.substring(
-                GBC1_MAGIC.length + 1
-            )
+    const imageUrl =
+        URL.createObjectURL(
+            blob
         );
 
 
-    const stream =
-        new Blob([compressed])
-            .stream()
-            .pipeThrough(
-                new DecompressionStream(
-                    "deflate"
-                )
-            );
+    const image =
+        new Image();
 
 
-    const buffer =
-        await new Response(stream)
-            .arrayBuffer();
-
-
-    const raw =
-        new Uint8Array(
-            buffer
-        );
-
-
-    if (
-        raw.length < 14
-    ) {
-
-        throw new Error(
-            "GBC1 image is too short."
-        );
-
-    }
-
-
-    if (
-        raw[0] !== 1
-    ) {
-
-        throw new Error(
-            "Unsupported GBC1 version."
-        );
-
-    }
-
-
-    const flags =
-        raw[1];
-
-
-    const dimensionCode =
-        flags & 3;
-
-
-    let width;
-    let height;
-
-
-    if (
-        dimensionCode === 0
-    ) {
-
-        width =
-            128;
-
-        height =
-            112;
-
-    }
-    else if (
-        dimensionCode === 1
-    ) {
-
-        width =
-            160;
-
-        height =
-            144;
-
-    }
-    else {
-
-        throw new Error(
-            "Unsupported GBC1 dimensions."
-        );
-
-    }
-
-
-    const codec =
-        (
-            flags >> 2
-        ) & 3;
-
-
-    const palette =
-        raw.subarray(
-            2,
-            14
-        );
-
-
-    let pixelData =
-        raw.subarray(
-            14
-        );
-
-
-    /*
-     * XOR.
-     */
-    function xorDecode(
-        bytes
-    ) {
-
-        const output =
-            new Uint8Array(
-                bytes.length
-            );
-
-
-        let previous =
-            0;
-
-
-        for (
-            let i = 0;
-            i < bytes.length;
-            i++
+    await new Promise(
+        function (
+            resolve,
+            reject
         ) {
 
-            output[i] =
-                bytes[i] ^
-                previous;
+            image.onload =
+                resolve;
 
 
-            previous =
-                output[i];
+            image.onerror =
+                function () {
 
-        }
-
-
-        return output;
-
-    }
-
-
-    /*
-     * RLE.
-     */
-    function rleDecode(
-        bytes
-    ) {
-
-        const output = [];
-
-
-        let i = 0;
-
-
-        while (
-            i < bytes.length
-        ) {
-
-            const value =
-                bytes[i++];
-
-
-            if (
-                value !== 255
-            ) {
-
-                output.push(
-                    value
-                );
-
-                continue;
-
-            }
-
-
-            if (
-                i + 1 >=
-                bytes.length
-            ) {
-
-                throw new Error(
-                    "Invalid GBC1 RLE."
-                );
-
-            }
-
-
-            const marker =
-                bytes[i++];
-
-
-            const count =
-                bytes[i++];
-
-
-            if (
-                marker !== 0 ||
-                count === 0
-            ) {
-
-                throw new Error(
-                    "Invalid GBC1 RLE."
-                );
-
-            }
-
-
-            if (
-                count === 1
-            ) {
-
-                output.push(
-                    255
-                );
-
-            }
-            else {
-
-                for (
-                    let n = 0;
-                    n < count;
-                    n++
-                ) {
-
-                    output.push(
-                        0
+                    reject(
+                        new Error(
+                            "GBC4 WebP image could not be decoded."
+                        )
                     );
 
-                }
+                };
 
-            }
+
+            image.src =
+                imageUrl;
 
         }
+    );
 
 
-        return new Uint8Array(
-            output
-        );
-
-    }
-
-
-    if (
-        codec === 1
-    ) {
-
-        pixelData =
-            xorDecode(
-                pixelData
-            );
-
-    }
-    else if (
-        codec === 2
-    ) {
-
-        pixelData =
-            xorDecode(
-                rleDecode(
-                    pixelData
-                )
-            );
-
-    }
-    else if (
-        codec !== 0
-    ) {
-
-        throw new Error(
-            "Unsupported GBC1 codec."
-        );
-
-    }
-
-
-    const expectedLength =
-        Math.ceil(
-            width *
-            height /
-            4
-        );
-
-
-    if (
-        pixelData.length !==
-        expectedLength
-    ) {
-
-        throw new Error(
-            "Invalid GBC1 pixel data."
-        );
-
-    }
-
-
+    /*
+     * Copy WebP into a canvas.
+     */
     const canvas =
         document.createElement(
             "canvas"
@@ -1755,11 +1230,11 @@ async function loadGBC1(
 
 
     canvas.width =
-        width;
+        image.naturalWidth;
 
 
     canvas.height =
-        height;
+        image.naturalHeight;
 
 
     const ctx =
@@ -1768,91 +1243,19 @@ async function loadGBC1(
         );
 
 
-    const imageData =
-        ctx.createImageData(
-            width,
-            height
-        );
+    ctx.imageSmoothingEnabled =
+        false;
 
 
-    let pixel =
-        0;
-
-
-    for (
-        let i = 0;
-        i < pixelData.length;
-        i++
-    ) {
-
-        const packed =
-            pixelData[i];
-
-
-        for (
-            let shift = 6;
-            shift >= 0 &&
-            pixel <
-                width * height;
-            shift -= 2
-        ) {
-
-            const shade =
-                (
-                    packed >>
-                    shift
-                ) & 3;
-
-
-            const paletteOffset =
-                shade * 3;
-
-
-            const outputOffset =
-                pixel * 4;
-
-
-            imageData.data[
-                outputOffset
-            ] =
-                palette[
-                    paletteOffset
-                ];
-
-
-            imageData.data[
-                outputOffset + 1
-            ] =
-                palette[
-                    paletteOffset + 1
-                ];
-
-
-            imageData.data[
-                outputOffset + 2
-            ] =
-                palette[
-                    paletteOffset + 2
-                ];
-
-
-            imageData.data[
-                outputOffset + 3
-            ] =
-                255;
-
-
-            pixel++;
-
-        }
-
-    }
-
-
-    ctx.putImageData(
-        imageData,
+    ctx.drawImage(
+        image,
         0,
         0
+    );
+
+
+    URL.revokeObjectURL(
+        imageUrl
     );
 
 
@@ -1895,8 +1298,7 @@ function unpackRow(
         const shift =
             6 -
             (
-                (x % 4) *
-                2
+                (x % 4) * 2
             );
 
 
@@ -1935,8 +1337,7 @@ function decodeRowRLE(
     ) {
 
         if (
-            offset >=
-            bytes.length
+            offset >= bytes.length
         ) {
 
             throw new Error(
@@ -1961,8 +1362,7 @@ function decodeRowRLE(
 
 
         if (
-            x + count >
-            width
+            x + count > width
         ) {
 
             throw new Error(
@@ -1992,7 +1392,7 @@ function decodeRowRLE(
 }
 
 
-async function loadGBC3(
+async function decodeGBC3(
     encoded
 ) {
 
@@ -2004,44 +1404,19 @@ async function loadGBC3(
         );
 
 
-    const stream =
-        new Blob([compressed])
-            .stream()
-            .pipeThrough(
-                new DecompressionStream(
-                    "deflate"
-                )
-            );
-
-
-    const buffer =
-        await new Response(stream)
-            .arrayBuffer();
-
-
     const raw =
-        new Uint8Array(
-            buffer
+        await inflate(
+            compressed
         );
 
 
     if (
-        raw.length < 14
-    ) {
-
-        throw new Error(
-            "GBC3 image is too short."
-        );
-
-    }
-
-
-    if (
+        raw.length < 14 ||
         raw[0] !== 3
     ) {
 
         throw new Error(
-            "Unsupported GBC3 version."
+            "Invalid GBC3 image."
         );
 
     }
@@ -2059,22 +1434,16 @@ async function loadGBC3(
         dimensionCode === 0
     ) {
 
-        width =
-            128;
-
-        height =
-            112;
+        width = 128;
+        height = 112;
 
     }
     else if (
         dimensionCode === 1
     ) {
 
-        width =
-            160;
-
-        height =
-            144;
+        width = 160;
+        height = 144;
 
     }
     else {
@@ -2095,8 +1464,7 @@ async function loadGBC3(
 
     const pixels =
         new Uint8Array(
-            width *
-            height
+            width * height
         );
 
 
@@ -2115,8 +1483,7 @@ async function loadGBC3(
     ) {
 
         if (
-            offset >=
-            raw.length
+            offset >= raw.length
         ) {
 
             throw new Error(
@@ -2130,9 +1497,6 @@ async function loadGBC3(
             raw[offset++];
 
 
-        /*
-         * RLE.
-         */
         if (
             mode === 0
         ) {
@@ -2159,11 +1523,6 @@ async function loadGBC3(
                 result.row;
 
         }
-
-
-        /*
-         * Packed.
-         */
         else if (
             mode === 1
         ) {
@@ -2187,23 +1546,18 @@ async function loadGBC3(
             }
 
 
-            const packed =
-                raw.subarray(
-                    offset,
-                    offset +
-                    packedLength
+            const row =
+                unpackRow(
+                    raw.subarray(
+                        offset,
+                        offset + packedLength
+                    ),
+                    width
                 );
 
 
             offset +=
                 packedLength;
-
-
-            const row =
-                unpackRow(
-                    packed,
-                    width
-                );
 
 
             pixels.set(
@@ -2216,11 +1570,6 @@ async function loadGBC3(
                 row;
 
         }
-
-
-        /*
-         * Repeat.
-         */
         else if (
             mode === 2
         ) {
@@ -2242,19 +1591,39 @@ async function loadGBC3(
             );
 
         }
-
-
         else {
 
             throw new Error(
-                "Unknown GBC3 row mode: " +
-                mode
+                "Unknown GBC3 row mode."
             );
 
         }
 
     }
 
+
+    return createPaletteCanvas(
+        width,
+        height,
+        pixels,
+        palette
+    );
+
+}
+
+
+/*
+============================================================
+CREATE PALETTE CANVAS
+============================================================
+*/
+
+function createPaletteCanvas(
+    width,
+    height,
+    pixels,
+    palette
+) {
 
     const canvas =
         document.createElement(
@@ -2293,41 +1662,27 @@ async function loadGBC3(
             pixels[i];
 
 
-        const paletteOffset =
+        const p =
             shade * 3;
 
 
-        const outputOffset =
+        const o =
             i * 4;
 
 
-        imageData.data[
-            outputOffset
-        ] =
-            palette[
-                paletteOffset
-            ];
+        imageData.data[o] =
+            palette[p];
 
 
-        imageData.data[
-            outputOffset + 1
-        ] =
-            palette[
-                paletteOffset + 1
-            ];
+        imageData.data[o + 1] =
+            palette[p + 1];
 
 
-        imageData.data[
-            outputOffset + 2
-        ] =
-            palette[
-                paletteOffset + 2
-            ];
+        imageData.data[o + 2] =
+            palette[p + 2];
 
 
-        imageData.data[
-            outputOffset + 3
-        ] =
+        imageData.data[o + 3] =
             255;
 
     }
@@ -2340,141 +1695,178 @@ async function loadGBC3(
     );
 
 
-    displayCanvas(
-        canvas
-    );
+    return canvas;
 
 }
 
 
 /*
 ============================================================
-GBC2
+GBC1 DECODER
 ============================================================
 */
 
-async function loadGBC2(
-    encoded
+function xorDecode(
+    bytes
 ) {
 
-    /*
-     * GBC2 compatibility loader.
-     *
-     * GBC2 used the same basic 2-bit image representation
-     * but with its own compressed payload.
-     *
-     * Try the GBC2 stream using the GBC1-compatible
-     * decompression structure first.
-     */
+    const output =
+        new Uint8Array(
+            bytes.length
+        );
+
+
+    let previous =
+        0;
+
+
+    for (
+        let i = 0;
+        i < bytes.length;
+        i++
+    ) {
+
+        output[i] =
+            bytes[i] ^
+            previous;
+
+
+        previous =
+            output[i];
+
+    }
+
+
+    return output;
+
+}
+
+
+function rleDecodeGBC1(
+    bytes
+) {
+
+    const output =
+        [];
+
+
+    let i =
+        0;
+
+
+    while (
+        i < bytes.length
+    ) {
+
+        const value =
+            bytes[i++];
+
+
+        if (
+            value !== 255
+        ) {
+
+            output.push(
+                value
+            );
+
+
+            continue;
+
+        }
+
+
+        if (
+            i + 1 >= bytes.length
+        ) {
+
+            throw new Error(
+                "Invalid GBC1 RLE."
+            );
+
+        }
+
+
+        const marker =
+            bytes[i++];
+
+
+        const count =
+            bytes[i++];
+
+
+        if (
+            marker !== 0 ||
+            count === 0
+        ) {
+
+            throw new Error(
+                "Invalid GBC1 RLE."
+            );
+
+        }
+
+
+        if (
+            count === 1
+        ) {
+
+            output.push(
+                255
+            );
+
+        }
+        else {
+
+            for (
+                let n = 0;
+                n < count;
+                n++
+            ) {
+
+                output.push(
+                    0
+                );
+
+            }
+
+        }
+
+    }
+
+
+    return new Uint8Array(
+        output
+    );
+
+}
+
+
+async function decodeGBC1(
+    encoded
+) {
 
     const compressed =
         base64UrlToBytes(
             encoded.substring(
-                GBC2_MAGIC.length + 1
+                GBC1_MAGIC.length + 1
             )
         );
 
 
-    let raw;
-
-
-    try {
-
-        const stream =
-            new Blob([compressed])
-                .stream()
-                .pipeThrough(
-                    new DecompressionStream(
-                        "deflate"
-                    )
-                );
-
-
-        raw =
-            new Uint8Array(
-                await new Response(stream)
-                    .arrayBuffer()
-            );
-
-    }
-    catch (error) {
-
-        throw new Error(
-            "Could not decompress GBC2 image."
+    const raw =
+        await inflate(
+            compressed
         );
 
-    }
-
-
-    /*
-     * Some older GBC2 images may carry a GBC1-style
-     * header. Decode that representation when present.
-     */
-    if (
-        raw.length >= 14 &&
-        raw[0] === 1
-    ) {
-
-        /*
-         * Re-use the GBC1 decoder by reconstructing
-         * a GBC1 URL from the decompressed payload.
-         */
-        const reconstructed =
-            new Uint8Array(
-                raw.length
-            );
-
-
-        reconstructed.set(
-            raw
-        );
-
-
-        const canvas =
-            await decodeRawGBC1(
-                reconstructed
-            );
-
-
-        displayCanvas(
-            canvas
-        );
-
-
-        return;
-
-    }
-
-
-    /*
-     * If the older GBC2 payload is not recognized,
-     * give a useful compatibility error rather than
-     * displaying corrupted data.
-     */
-    throw new Error(
-        "This GBC2 image uses an older GBC2 layout that " +
-        "this viewer cannot identify."
-    );
-
-}
-
-
-/*
-============================================================
-RAW GBC1 DECODER
-============================================================
-*/
-
-async function decodeRawGBC1(
-    raw
-) {
 
     if (
-        raw.length < 14
+        raw.length < 14 ||
+        raw[0] !== 1
     ) {
 
         throw new Error(
-            "GBC1 data is too short."
+            "Invalid GBC1 image."
         );
 
     }
@@ -2496,22 +1888,16 @@ async function decodeRawGBC1(
         dimensionCode === 0
     ) {
 
-        width =
-            128;
-
-        height =
-            112;
+        width = 128;
+        height = 112;
 
     }
     else if (
         dimensionCode === 1
     ) {
 
-        width =
-            160;
-
-        height =
-            144;
+        width = 160;
+        height = 144;
 
     }
     else {
@@ -2542,141 +1928,6 @@ async function decodeRawGBC1(
         );
 
 
-    function xorDecode(
-        bytes
-    ) {
-
-        const output =
-            new Uint8Array(
-                bytes.length
-            );
-
-
-        let previous =
-            0;
-
-
-        for (
-            let i = 0;
-            i < bytes.length;
-            i++
-        ) {
-
-            output[i] =
-                bytes[i] ^
-                previous;
-
-
-            previous =
-                output[i];
-
-        }
-
-
-        return output;
-
-    }
-
-
-    function rleDecode(
-        bytes
-    ) {
-
-        const output = [];
-
-
-        let i =
-            0;
-
-
-        while (
-            i < bytes.length
-        ) {
-
-            const value =
-                bytes[i++];
-
-
-            if (
-                value !== 255
-            ) {
-
-                output.push(
-                    value
-                );
-
-                continue;
-
-            }
-
-
-            if (
-                i + 1 >=
-                bytes.length
-            ) {
-
-                throw new Error(
-                    "Invalid GBC1 RLE."
-                );
-
-            }
-
-
-            const marker =
-                bytes[i++];
-
-
-            const count =
-                bytes[i++];
-
-
-            if (
-                marker !== 0 ||
-                count === 0
-            ) {
-
-                throw new Error(
-                    "Invalid GBC1 RLE."
-                );
-
-            }
-
-
-            if (
-                count === 1
-            ) {
-
-                output.push(
-                    255
-                );
-
-            }
-            else {
-
-                for (
-                    let n = 0;
-                    n < count;
-                    n++
-                ) {
-
-                    output.push(
-                        0
-                    );
-
-                }
-
-            }
-
-        }
-
-
-        return new Uint8Array(
-            output
-        );
-
-    }
-
-
     if (
         codec === 1
     ) {
@@ -2693,25 +1944,31 @@ async function decodeRawGBC1(
 
         pixelData =
             xorDecode(
-                rleDecode(
+                rleDecodeGBC1(
                     pixelData
                 )
             );
 
     }
+    else if (
+        codec !== 0
+    ) {
+
+        throw new Error(
+            "Unsupported GBC1 codec."
+        );
+
+    }
 
 
-    const expectedLength =
+    const expected =
         Math.ceil(
-            width *
-            height /
-            4
+            width * height / 4
         );
 
 
     if (
-        pixelData.length !==
-        expectedLength
+        pixelData.length !== expected
     ) {
 
         throw new Error(
@@ -2721,30 +1978,9 @@ async function decodeRawGBC1(
     }
 
 
-    const canvas =
-        document.createElement(
-            "canvas"
-        );
-
-
-    canvas.width =
-        width;
-
-
-    canvas.height =
-        height;
-
-
-    const ctx =
-        canvas.getContext(
-            "2d"
-        );
-
-
-    const imageData =
-        ctx.createImageData(
-            width,
-            height
+    const pixels =
+        new Uint8Array(
+            width * height
         );
 
 
@@ -2753,83 +1989,33 @@ async function decodeRawGBC1(
 
 
     for (
-        let i = 0;
-        i < pixelData.length;
-        i++
+        const packed of pixelData
     ) {
-
-        const packed =
-            pixelData[i];
-
 
         for (
             let shift = 6;
             shift >= 0 &&
-            pixel <
-                width * height;
+            pixel < pixels.length;
             shift -= 2
         ) {
 
-            const shade =
+            pixels[pixel++] =
                 (
                     packed >>
                     shift
                 ) & 3;
-
-
-            const paletteOffset =
-                shade * 3;
-
-
-            const outputOffset =
-                pixel * 4;
-
-
-            imageData.data[
-                outputOffset
-            ] =
-                palette[
-                    paletteOffset
-                ];
-
-
-            imageData.data[
-                outputOffset + 1
-            ] =
-                palette[
-                    paletteOffset + 1
-                ];
-
-
-            imageData.data[
-                outputOffset + 2
-            ] =
-                palette[
-                    paletteOffset + 2
-                ];
-
-
-            imageData.data[
-                outputOffset + 3
-            ] =
-                255;
-
-
-            pixel++;
 
         }
 
     }
 
 
-    ctx.putImageData(
-        imageData,
-        0,
-        0
+    return createPaletteCanvas(
+        width,
+        height,
+        pixels,
+        palette
     );
-
-
-    return canvas;
 
 }
 
@@ -2859,44 +2045,53 @@ function loadLegacyPNG(
     }
 
 
-    photo.onload =
-        function() {
+    return new Promise(
+        function (
+            resolve,
+            reject
+        ) {
 
-            upload.style.display =
-                "none";
+            photo.onload =
+                function () {
 
-            photo.style.display =
-                "block";
-
-        };
-
-
-    photo.onerror =
-        function() {
-
-            upload.style.display =
-                "none";
-
-            photo.style.display =
-                "none";
-
-            showError(
-                "The image data in this URL could not be decoded."
-            );
-
-        };
+                    upload.style.display =
+                        "none";
 
 
-    photo.src =
-        "data:image/png;base64," +
-        base64;
+                    photo.style.display =
+                        "block";
+
+
+                    resolve();
+
+                };
+
+
+            photo.onerror =
+                function () {
+
+                    reject(
+                        new Error(
+                            "The legacy PNG data could not be decoded."
+                        )
+                    );
+
+                };
+
+
+            photo.src =
+                "data:image/png;base64," +
+                base64;
+
+        }
+    );
 
 }
 
 
 /*
 ============================================================
-LOAD HASH
+LOAD IMAGE FROM HASH
 ============================================================
 */
 
@@ -2913,17 +2108,25 @@ async function loadImageFromHash() {
         upload.style.display =
             "flex";
 
+
         photo.style.display =
             "none";
 
-        hideStatus();
+
+        setStatus(
+            "Maximum URL: " +
+            MAX_COMPLETE_URL_LENGTH +
+            " characters"
+        );
+
 
         return;
 
     }
 
 
-    hideError();
+    errorBox.style.display =
+        "none";
 
 
     try {
@@ -2956,8 +2159,14 @@ async function loadImageFromHash() {
             )
         ) {
 
-            await loadGBC3(
-                encoded
+            const canvas =
+                await decodeGBC3(
+                    encoded
+                );
+
+
+            displayCanvas(
+                canvas
             );
 
 
@@ -2968,6 +2177,13 @@ async function loadImageFromHash() {
 
         /*
          * GBC2
+         *
+         * The original GBC2 format used the same
+         * compressed container/header family as GBC1
+         * but may contain its own encoder-specific
+         * flags.
+         *
+         * Attempt the GBC1-compatible decoder first.
          */
         if (
             encoded.startsWith(
@@ -2975,8 +2191,27 @@ async function loadImageFromHash() {
             )
         ) {
 
-            await loadGBC2(
-                encoded
+            /*
+             * GBC2 compatibility.
+             *
+             * Strip the GBC2 identifier and decode its
+             * payload using the legacy packed decoder.
+             */
+            const gbc1Compatible =
+                GBC1_MAGIC +
+                encoded.substring(
+                    GBC2_MAGIC.length
+                );
+
+
+            const canvas =
+                await decodeGBC1(
+                    gbc1Compatible
+                );
+
+
+            displayCanvas(
+                canvas
             );
 
 
@@ -2994,8 +2229,14 @@ async function loadImageFromHash() {
             )
         ) {
 
-            await loadGBC1(
-                encoded
+            const canvas =
+                await decodeGBC1(
+                    encoded
+                );
+
+
+            displayCanvas(
+                canvas
             );
 
 
@@ -3005,9 +2246,9 @@ async function loadImageFromHash() {
 
 
         /*
-         * Original PNG/base64 format.
+         * Old raw PNG/Base64 URL.
          */
-        loadLegacyPNG(
+        await loadLegacyPNG(
             encoded
         );
 
@@ -3021,6 +2262,7 @@ async function loadImageFromHash() {
 
         upload.style.display =
             "none";
+
 
         photo.style.display =
             "none";
@@ -3038,13 +2280,13 @@ async function loadImageFromHash() {
 
 /*
 ============================================================
-UPLOAD
+UPLOAD IMAGE
 ============================================================
 */
 
 fileInput.addEventListener(
     "change",
-    function() {
+    function () {
 
         const file =
             fileInput.files[0];
@@ -3057,7 +2299,13 @@ fileInput.addEventListener(
         }
 
 
-        hideError();
+        errorBox.style.display =
+            "none";
+
+
+        setStatus(
+            "Reading image…"
+        );
 
 
         const reader =
@@ -3065,38 +2313,37 @@ fileInput.addEventListener(
 
 
         reader.onload =
-            function() {
+            function () {
 
                 const image =
                     new Image();
 
 
                 image.onload =
-                    async function() {
+                    async function () {
 
                         try {
 
-                            const width =
+                            const sourceWidth =
                                 image.naturalWidth;
 
 
-                            const height =
+                            const sourceHeight =
                                 image.naturalHeight;
 
 
                             /*
-                             * Game Boy Camera native sizes.
+                             * Accept native GBC sizes.
                              */
                             if (
                                 !(
                                     (
-                                        width === 128 &&
-                                        height === 112
-                                    )
-                                    ||
+                                        sourceWidth === 128 &&
+                                        sourceHeight === 112
+                                    ) ||
                                     (
-                                        width === 160 &&
-                                        height === 144
+                                        sourceWidth === 160 &&
+                                        sourceHeight === 144
                                     )
                                 )
                             ) {
@@ -3110,77 +2357,56 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Create a clean source canvas.
+                             * Source canvas.
                              */
-                            const source =
+                            const sourceCanvas =
                                 document.createElement(
                                     "canvas"
                                 );
 
 
-                            source.width =
-                                width;
+                            sourceCanvas.width =
+                                sourceWidth;
 
 
-                            source.height =
-                                height;
+                            sourceCanvas.height =
+                                sourceHeight;
 
 
-                            const sourceCtx =
-                                source.getContext(
+                            const ctx =
+                                sourceCanvas.getContext(
                                     "2d"
                                 );
 
 
-                            sourceCtx.imageSmoothingEnabled =
+                            ctx.imageSmoothingEnabled =
                                 false;
 
 
-                            sourceCtx.drawImage(
+                            ctx.drawImage(
                                 image,
                                 0,
                                 0,
-                                width,
-                                height
+                                sourceWidth,
+                                sourceHeight
                             );
 
 
                             /*
-                             * Encode using the adaptive GBC4
-                             * Discord encoder.
+                             * Encode using adaptive GBC4.
                              */
-                            showStatus(
-                                "Finding best image under " +
-                                GBC4_MAX_URL_LENGTH +
-                                " characters..."
-                            );
-
-
                             const result =
                                 await encodeGBC4(
-                                    source,
-                                    width,
-                                    height
+                                    sourceCanvas
                                 );
 
 
                             /*
-                             * Build final hash.
-                             */
-                            const newHash =
-                                "#" +
-                                result.encoded;
-
-
-                            /*
-                             * IMPORTANT:
-                             *
-                             * Setting location.hash creates
-                             * the shareable URL without
-                             * reloading the page.
+                             * Put the final GBC4 URL
+                             * into the hash.
                              */
                             window.location.hash =
-                                newHash;
+                                result.encoded;
 
 
                             /*
@@ -3189,32 +2415,24 @@ fileInput.addEventListener(
                             await loadImageFromHash();
 
 
-                            hideStatus();
-
-
                             /*
                              * Diagnostics.
                              */
                             console.log(
-                                "================================"
+                                "=============================="
                             );
 
 
                             console.log(
-                                "GBC4 RESULT"
+                                "GBC4"
                             );
 
 
                             console.log(
-                                "================================"
-                            );
-
-
-                            console.log(
-                                "Source:",
-                                width +
+                                "Original:",
+                                sourceWidth +
                                 "×" +
-                                height
+                                sourceHeight
                             );
 
 
@@ -3228,18 +2446,22 @@ fileInput.addEventListener(
 
                             console.log(
                                 "WebP quality:",
-                                result.quality
+                                Math.round(
+                                    result.quality * 100
+                                ) +
+                                "%"
                             );
 
 
                             console.log(
-                                "WebP bytes:",
-                                result.compressedBytes
+                                "WebP:",
+                                result.bytes,
+                                "bytes"
                             );
 
 
                             console.log(
-                                "Hash:",
+                                "GBC4 hash:",
                                 result.encoded.length,
                                 "characters"
                             );
@@ -3247,31 +2469,42 @@ fileInput.addEventListener(
 
                             console.log(
                                 "Complete URL:",
-                                result.urlLength,
+                                result.completeUrlLength,
                                 "characters"
                             );
 
 
                             console.log(
                                 "Maximum:",
-                                GBC4_MAX_URL_LENGTH,
+                                MAX_COMPLETE_URL_LENGTH,
                                 "characters"
                             );
 
 
                             console.log(
-                                "Remaining:",
-                                GBC4_MAX_URL_LENGTH -
-                                result.urlLength,
-                                "characters"
+                                "Candidates tested:",
+                                result.tested
                             );
 
 
                             console.log(
-                                "URL:",
-                                result.url
+                                "=============================="
                             );
 
+
+                            setStatus(
+                                result.width +
+                                "×" +
+                                result.height +
+                                " • WebP " +
+                                Math.round(
+                                    result.quality * 100
+                                ) +
+                                "% • URL " +
+                                result.completeUrlLength +
+                                "/" +
+                                MAX_COMPLETE_URL_LENGTH
+                            );
 
                         }
                         catch (error) {
@@ -3281,13 +2514,13 @@ fileInput.addEventListener(
                             );
 
 
-                            hideStatus();
-
-
                             showError(
                                 error.message ||
                                 "Could not encode image."
                             );
+
+
+                            setStatus("");
 
                         }
 
@@ -3295,11 +2528,14 @@ fileInput.addEventListener(
 
 
                 image.onerror =
-                    function() {
+                    function () {
 
                         showError(
                             "Could not read the selected image."
                         );
+
+
+                        setStatus("");
 
                     };
 
@@ -3311,11 +2547,14 @@ fileInput.addEventListener(
 
 
         reader.onerror =
-            function() {
+            function () {
 
                 showError(
                     "Could not read the selected file."
                 );
+
+
+                setStatus("");
 
             };
 
@@ -3336,7 +2575,7 @@ BACK / FORWARD
 
 window.addEventListener(
     "hashchange",
-    function() {
+    function () {
 
         loadImageFromHash();
 
@@ -3352,7 +2591,7 @@ CLICK IMAGE → COPY URL
 
 photo.addEventListener(
     "click",
-    async function() {
+    async function () {
 
         const url =
             window.location.href;
@@ -3370,7 +2609,7 @@ photo.addEventListener(
 
 
             setTimeout(
-                function() {
+                function () {
 
                     copiedBox.style.display =
                         "none";
@@ -3420,7 +2659,7 @@ photo.addEventListener(
 
 
                 setTimeout(
-                    function() {
+                    function () {
 
                         copiedBox.style.display =
                             "none";
