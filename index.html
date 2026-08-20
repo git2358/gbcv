@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Game Boy Camera Photo</title>
+
+<style>
+    html,
+    body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: sans-serif;
+    }
+
+    #viewer {
+        width: 100vw;
+        height: 100vh;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #photo {
+        display: none;
+
+        max-width: 100vw;
+        max-height: 100vh;
+
+        width: auto;
+        height: auto;
+
+        object-fit: contain;
+
+        /* Keep Game Boy pixels sharp */
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+
+        cursor: pointer;
+
+        user-select: none;
+        -webkit-user-drag: none;
+    }
+
+    #upload {
+        color: white;
+        text-align: center;
+    }
+
+    #upload input {
+        display: none;
+    }
+
+    #upload label {
+        display: inline-block;
+        padding: 14px 22px;
+        background: #222;
+        border: 1px solid #555;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    #upload label:hover {
+        background: #333;
+    }
+
+    #message {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+
+        padding: 8px 14px;
+
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+
+        border-radius: 6px;
+
+        font-size: 14px;
+
+        opacity: 0;
+        pointer-events: none;
+
+        transition: opacity 0.2s;
+    }
+
+    #message.show {
+        opacity: 1;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="viewer">
+
+    <div id="upload">
+        <label for="file">
+            Choose Game Boy Camera Photo
+        </label>
+
+        <input
+            id="file"
+            type="file"
+            accept="image/*"
+        >
+    </div>
+
+    <img id="photo" alt="Game Boy Camera Photo">
+
+</div>
+
+<div id="message">
+    URL copied!
+</div>
+
+<script>
+(function () {
+
+    const photo = document.getElementById("photo");
+    const upload = document.getElementById("upload");
+    const fileInput = document.getElementById("file");
+    const message = document.getElementById("message");
+
+    /*
+     * Convert normal Base64 to URL-safe Base64.
+     */
+    function base64ToUrlSafe(base64) {
+        return base64
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=+$/, "");
+    }
+
+    /*
+     * Convert URL-safe Base64 back to normal Base64.
+     */
+    function urlSafeToBase64(value) {
+        value = value
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+
+        while (value.length % 4) {
+            value += "=";
+        }
+
+        return value;
+    }
+
+    /*
+     * Display an image.
+     */
+    function showImage(src) {
+        photo.onload = function () {
+            upload.style.display = "none";
+            photo.style.display = "block";
+        };
+
+        photo.onerror = function () {
+            photo.style.display = "none";
+            upload.style.display = "block";
+        };
+
+        photo.src = src;
+    }
+
+    /*
+     * Show a small notification.
+     */
+    function showMessage(text) {
+        message.textContent = text;
+        message.classList.add("show");
+
+        setTimeout(function () {
+            message.classList.remove("show");
+        }, 1500);
+    }
+
+    /*
+     * Read the image from the URL.
+     *
+     * The preferred format is:
+     *
+     *     #<base64-image>
+     *
+     * We also support:
+     *
+     *     #url=<encoded-image-url>
+     */
+    function loadFromUrl() {
+
+        const hash = window.location.hash.substring(1);
+
+        if (!hash) {
+            return;
+        }
+
+        /*
+         * Support an encoded normal image URL.
+         *
+         * Example:
+         *
+         * #url=https%3A%2F%2Fexample.com%2Fphoto.png
+         */
+        if (hash.startsWith("url=")) {
+
+            try {
+                const url = decodeURIComponent(hash.substring(4));
+                showImage(url);
+                return;
+            }
+            catch (error) {
+                console.error(error);
+                return;
+            }
+        }
+
+        /*
+         * Otherwise treat the hash as URL-safe Base64.
+         */
+        try {
+
+            const base64 = urlSafeToBase64(hash);
+
+            const binary = atob(base64);
+
+            const bytes = new Uint8Array(binary.length);
+
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+
+            /*
+             * Detect the MIME type from the PNG/JPEG/etc data.
+             */
+            let mime = "image/png";
+
+            if (
+                bytes[0] === 0xFF &&
+                bytes[1] === 0xD8 &&
+                bytes[2] === 0xFF
+            ) {
+                mime = "image/jpeg";
+            }
+
+            const blob = new Blob([bytes], {
+                type: mime
+            });
+
+            const objectUrl = URL.createObjectURL(blob);
+
+            showImage(objectUrl);
+
+        }
+        catch (error) {
+
+            console.error("Could not decode image:", error);
+
+        }
+    }
+
+    /*
+     * Convert uploaded image to PNG.
+     *
+     * PNG is ideal for Game Boy Camera images because it
+     * preserves the pixels without introducing JPEG artifacts.
+     */
+    fileInput.addEventListener("change", function () {
+
+        const file = fileInput.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = function () {
+
+            const img = new Image();
+
+            img.onload = function () {
+
+                /*
+                 * Draw at the original resolution.
+                 *
+                 * This prevents the browser from introducing
+                 * interpolation before the image is encoded.
+                 */
+                const canvas = document.createElement("canvas");
+
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+
+                const ctx = canvas.getContext("2d");
+
+                ctx.imageSmoothingEnabled = false;
+
+                ctx.drawImage(
+                    img,
+                    0,
+                    0,
+                    canvas.width,
+                    canvas.height
+                );
+
+                /*
+                 * Convert to PNG.
+                 */
+                const dataUrl = canvas.toDataURL("image/png");
+
+                /*
+                 * Remove:
+                 *
+                 * data:image/png;base64,
+                 *
+                 * leaving only the Base64 data.
+                 */
+                const base64 = dataUrl.split(",")[1];
+
+                /*
+                 * Make it safe to put into a URL.
+                 */
+                const encoded = base64ToUrlSafe(base64);
+
+                /*
+                 * Create the shareable URL.
+                 */
+                const url =
+                    window.location.origin +
+                    window.location.pathname +
+                    "#" +
+                    encoded;
+
+                /*
+                 * Open the generated image URL in the
+                 * same window.
+                 */
+                window.location.href = url;
+            };
+
+            img.src = reader.result;
+        };
+
+        reader.readAsDataURL(file);
+
+    });
+
+    /*
+     * Clicking the image copies the current URL.
+     */
+    photo.addEventListener("click", async function () {
+
+        try {
+
+            await navigator.clipboard.writeText(
+                window.location.href
+            );
+
+            showMessage("URL copied!");
+
+        }
+        catch (error) {
+
+            /*
+             * Fallback for browsers where Clipboard API
+             * isn't available.
+             */
+            const textarea = document.createElement("textarea");
+
+            textarea.value = window.location.href;
+
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+
+            document.body.appendChild(textarea);
+
+            textarea.select();
+
+            try {
+                document.execCommand("copy");
+                showMessage("URL copied!");
+            }
+            catch (e) {
+                showMessage("Could not copy URL");
+            }
+
+            document.body.removeChild(textarea);
+        }
+
+    });
+
+    /*
+     * Load image when page opens.
+     */
+    loadFromUrl();
+
+})();
+</script>
+
+</body>
+</html>
