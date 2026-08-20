@@ -1,152 +1,228 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0,
-               maximum-scale=1.0,
-               user-scalable=no">
 
-<title>Game Boy Camera Viewer</title>
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,
+             initial-scale=1.0,
+             maximum-scale=1.0,
+             user-scalable=no"
+>
+
+<title>Game Boy Camera</title>
 
 <style>
-    * {
-        box-sizing: border-box;
-    }
 
-    html,
-    body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        background: #000;
-        overflow: hidden;
-    }
+* {
+    box-sizing: border-box;
+}
 
-    body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
 
-    /* Image viewer */
-    #photo {
-        display: none;
+html,
+body {
 
-        max-width: 100vw;
-        max-height: 100vh;
+    margin: 0;
 
-        width: auto;
-        height: auto;
+    width: 100%;
+    height: 100%;
 
-        object-fit: contain;
+    background: #000;
 
-        /*
-         * CRITICAL FOR GAME BOY CAMERA:
-         *
-         * Prevent smoothing when the tiny image
-         * is enlarged to fill the screen.
-         */
-        image-rendering: pixelated;
-        image-rendering: crisp-edges;
+    overflow: hidden;
 
-        cursor: pointer;
+}
 
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-user-drag: none;
-    }
 
-    /* Upload screen */
-    #upload {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+body {
 
-        gap: 15px;
+    display: flex;
 
-        color: #fff;
+    align-items: center;
+    justify-content: center;
 
-        text-align: center;
-    }
+}
 
-    #upload label {
-        display: inline-block;
 
-        padding: 14px 22px;
+/*
+============================================================
+IMAGE VIEWER
+============================================================
+*/
 
-        background: #222;
-        border: 1px solid #555;
-        border-radius: 8px;
+#photo {
 
-        font-family: sans-serif;
-        font-size: 16px;
+    display: none;
 
-        cursor: pointer;
-    }
+    max-width: 100vw;
+    max-height: 100vh;
 
-    #upload label:hover {
-        background: #333;
-    }
+    width: auto;
+    height: auto;
 
-    #file {
-        display: none;
-    }
+    object-fit: contain;
 
-    #error {
-        display: none;
+    /*
+     * CRITICAL FOR GAME BOY CAMERA
+     *
+     * Prevent smoothing when the tiny image
+     * is enlarged.
+     */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
 
-        position: fixed;
+    cursor: pointer;
 
-        left: 50%;
-        bottom: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
 
-        transform: translateX(-50%);
+}
 
-        max-width: 90vw;
 
-        padding: 10px 15px;
+/*
+============================================================
+UPLOAD SCREEN
+============================================================
+*/
 
-        background: rgba(150, 0, 0, 0.9);
+#upload {
 
-        color: white;
+    display: flex;
 
-        font-family: monospace;
-        font-size: 13px;
+    flex-direction: column;
 
-        border-radius: 6px;
+    align-items: center;
+    justify-content: center;
 
-        text-align: center;
-    }
+    gap: 15px;
 
-    #copied {
-        display: none;
+    color: #fff;
 
-        position: fixed;
+    text-align: center;
 
-        left: 50%;
-        bottom: 20px;
+}
 
-        transform: translateX(-50%);
 
-        padding: 10px 15px;
+#upload label {
 
-        background: rgba(0, 0, 0, 0.85);
+    display: inline-block;
 
-        color: white;
+    padding: 14px 22px;
 
-        font-family: sans-serif;
-        font-size: 14px;
+    background: #222;
 
-        border-radius: 6px;
-    }
+    border: 1px solid #555;
+
+    border-radius: 8px;
+
+    font-family: sans-serif;
+
+    font-size: 16px;
+
+    cursor: pointer;
+
+}
+
+
+#upload label:hover {
+
+    background: #333;
+
+}
+
+
+#file {
+
+    display: none;
+
+}
+
+
+/*
+============================================================
+ERROR
+============================================================
+*/
+
+#error {
+
+    display: none;
+
+    position: fixed;
+
+    left: 50%;
+    bottom: 20px;
+
+    transform: translateX(-50%);
+
+    max-width: 90vw;
+
+    padding: 10px 15px;
+
+    background: rgba(150, 0, 0, 0.9);
+
+    color: white;
+
+    font-family: monospace;
+
+    font-size: 13px;
+
+    border-radius: 6px;
+
+    text-align: center;
+
+}
+
+
+/*
+============================================================
+COPIED MESSAGE
+============================================================
+*/
+
+#copied {
+
+    display: none;
+
+    position: fixed;
+
+    left: 50%;
+    bottom: 20px;
+
+    transform: translateX(-50%);
+
+    padding: 10px 15px;
+
+    background: rgba(0, 0, 0, 0.85);
+
+    color: white;
+
+    font-family: sans-serif;
+
+    font-size: 14px;
+
+    border-radius: 6px;
+
+}
+
 </style>
+
 </head>
+
 
 <body>
 
-<!-- Upload screen -->
+
+<!--
+============================================================
+UPLOAD SCREEN
+============================================================
+-->
+
 <div id="upload">
 
     <label for="file">
@@ -162,7 +238,12 @@
 </div>
 
 
-<!-- Image -->
+<!--
+============================================================
+IMAGE
+============================================================
+-->
+
 <img
     id="photo"
     alt="Game Boy Camera Photo"
@@ -178,43 +259,86 @@
 
 <script>
 
-const photo = document.getElementById("photo");
-const upload = document.getElementById("upload");
-const fileInput = document.getElementById("file");
-const errorBox = document.getElementById("error");
-const copiedBox = document.getElementById("copied");
+
+/*
+################################################################
+#
+# GBC1
+#
+# GAME BOY CAMERA URL IMAGE FORMAT
+#
+################################################################
+#
+# URL:
+#
+#   #GBC1/<Base64URL>
+#
+#
+# The PNG is NOT stored in the URL.
+#
+# The URL contains:
+#
+#   4-colour pixels
+#       ↓
+#   2-bit packing
+#       ↓
+#   XOR/delta transform
+#       ↓
+#   optional zero-run encoding
+#       ↓
+#   DEFLATE
+#       ↓
+#   Base64URL
+#
+#
+# The decoder reconstructs the exact original pixels.
+#
+################################################################
+*/
+
+
+const GBC_MAGIC =
+    "GBC1";
+
+
+const GBC_VERSION =
+    1;
 
 
 /*
 ============================================================
-BASE64 URL-SAFE ENCODING
+DOM
 ============================================================
 */
 
-function makeUrlSafe(base64) {
-
-    return base64
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=/g, "");
-}
+const photo =
+    document.getElementById(
+        "photo"
+    );
 
 
-function makeNormalBase64(base64) {
+const upload =
+    document.getElementById(
+        "upload"
+    );
 
-    base64 = base64
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
 
-    /*
-     * Base64 length must be divisible by 4.
-     */
-    while (base64.length % 4 !== 0) {
-        base64 += "=";
-    }
+const fileInput =
+    document.getElementById(
+        "file"
+    );
 
-    return base64;
-}
+
+const errorBox =
+    document.getElementById(
+        "error"
+    );
+
+
+const copiedBox =
+    document.getElementById(
+        "copied"
+    );
 
 
 /*
@@ -225,8 +349,1560 @@ SHOW ERROR
 
 function showError(message) {
 
-    errorBox.textContent = message;
-    errorBox.style.display = "block";
+    errorBox.textContent =
+        message;
+
+    errorBox.style.display =
+        "block";
+
+}
+
+
+/*
+============================================================
+BASE64URL ENCODING
+============================================================
+*/
+
+function bytesToBase64Url(bytes) {
+
+    let binary = "";
+
+    const chunkSize =
+        0x8000;
+
+
+    for (
+        let i = 0;
+        i < bytes.length;
+        i += chunkSize
+    ) {
+
+        const chunk =
+            bytes.subarray(
+                i,
+                Math.min(
+                    i + chunkSize,
+                    bytes.length
+                )
+            );
+
+
+        binary +=
+            String.fromCharCode(
+                ...chunk
+            );
+
+    }
+
+
+    return btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
+
+}
+
+
+/*
+============================================================
+BASE64URL DECODING
+============================================================
+*/
+
+function base64UrlToBytes(string) {
+
+    let base64 =
+        string
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+
+
+    while (
+        base64.length % 4 !== 0
+    ) {
+
+        base64 += "=";
+
+    }
+
+
+    const binary =
+        atob(base64);
+
+
+    const bytes =
+        new Uint8Array(
+            binary.length
+        );
+
+
+    for (
+        let i = 0;
+        i < binary.length;
+        i++
+    ) {
+
+        bytes[i] =
+            binary.charCodeAt(i);
+
+    }
+
+
+    return bytes;
+
+}
+
+
+/*
+============================================================
+DEFLATE
+============================================================
+*/
+
+async function deflate(bytes) {
+
+    if (
+        !("CompressionStream" in window)
+    ) {
+
+        throw new Error(
+            "This browser does not support compression."
+        );
+
+    }
+
+
+    const stream =
+        new Blob([bytes])
+            .stream()
+            .pipeThrough(
+                new CompressionStream(
+                    "deflate"
+                )
+            );
+
+
+    const buffer =
+        await new Response(stream)
+            .arrayBuffer();
+
+
+    return new Uint8Array(
+        buffer
+    );
+
+}
+
+
+/*
+============================================================
+INFLATE
+============================================================
+*/
+
+async function inflate(bytes) {
+
+    if (
+        !("DecompressionStream" in window)
+    ) {
+
+        throw new Error(
+            "This browser does not support decompression."
+        );
+
+    }
+
+
+    const stream =
+        new Blob([bytes])
+            .stream()
+            .pipeThrough(
+                new DecompressionStream(
+                    "deflate"
+                )
+            );
+
+
+    const buffer =
+        await new Response(stream)
+            .arrayBuffer();
+
+
+    return new Uint8Array(
+        buffer
+    );
+
+}
+
+
+/*
+============================================================
+XOR / DELTA TRANSFORM
+============================================================
+
+Each packed byte is XORed with the previous packed byte.
+
+Example:
+
+    original:
+
+    20 20 20 21 21 21 20
+
+
+    transformed:
+
+    20 00 00 01 00 00 01
+
+
+This creates lots of zeros in similar areas,
+which makes RLE and DEFLATE much more effective.
+*/
+
+function xorEncode(bytes) {
+
+    const output =
+        new Uint8Array(
+            bytes.length
+        );
+
+
+    let previous =
+        0;
+
+
+    for (
+        let i = 0;
+        i < bytes.length;
+        i++
+    ) {
+
+        output[i] =
+            bytes[i] ^ previous;
+
+
+        previous =
+            bytes[i];
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+XOR / DELTA REVERSE
+============================================================
+*/
+
+function xorDecode(bytes) {
+
+    const output =
+        new Uint8Array(
+            bytes.length
+        );
+
+
+    let previous =
+        0;
+
+
+    for (
+        let i = 0;
+        i < bytes.length;
+        i++
+    ) {
+
+        output[i] =
+            bytes[i] ^ previous;
+
+
+        previous =
+            output[i];
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+============================================================
+ZERO RUN-LENGTH ENCODING
+============================================================
+
+Special byte:
+
+    0x00
+
+followed by a count means:
+
+    repeat zero <count> times
+
+
+Because zero itself needs to be representable,
+non-zero bytes are stored as:
+
+    value + 1
+
+Therefore:
+
+    00 xx
+
+means a zero run.
+
+    01
+
+means original byte 00.
+
+    FF
+
+means original byte FE.
+
+The value FF cannot directly represent original FF,
+so FF is encoded as:
+
+    00 01
+
+representing one zero?
+
+Instead, to keep the format simple and unambiguous,
+we use:
+
+    0x00 = RLE marker
+    0x01..0xFF = literal value + 1
+
+For literal FF, use:
+
+    00 00 FF
+
+This is handled below.
+*/
+
+
+function rleEncode(bytes) {
+
+    const output = [];
+
+    let i = 0;
+
+
+    while (
+        i < bytes.length
+    ) {
+
+        /*
+         * Zero run.
+         */
+        if (
+            bytes[i] === 0
+        ) {
+
+            let count = 1;
+
+
+            while (
+                i + count < bytes.length &&
+                bytes[i + count] === 0 &&
+                count < 255
+            ) {
+
+                count++;
+
+            }
+
+
+            output.push(0);
+            output.push(count);
+
+            i += count;
+
+            continue;
+
+        }
+
+
+        /*
+         * Literal byte.
+         *
+         * Literal FF is represented using:
+         *
+         *   0xFF 0x00
+         *
+         * Every other non-zero byte is stored
+         * directly.
+         */
+        if (
+            bytes[i] === 255
+        ) {
+
+            output.push(255);
+            output.push(0);
+
+        }
+        else {
+
+            output.push(
+                bytes[i]
+            );
+
+        }
+
+
+        i++;
+
+    }
+
+
+    return new Uint8Array(
+        output
+    );
+
+}
+
+
+/*
+============================================================
+RLE DECODE
+============================================================
+*/
+
+function rleDecode(bytes) {
+
+    const output = [];
+
+    let i = 0;
+
+
+    while (
+        i < bytes.length
+    ) {
+
+        const value =
+            bytes[i++];
+
+
+        /*
+         * Zero run.
+         */
+        if (
+            value === 0
+        ) {
+
+            if (
+                i >= bytes.length
+            ) {
+
+                throw new Error(
+                    "Invalid GBC1 RLE data."
+                );
+
+            }
+
+
+            const count =
+                bytes[i++];
+
+
+            for (
+                let n = 0;
+                n < count;
+                n++
+            ) {
+
+                output.push(0);
+
+            }
+
+
+            continue;
+
+        }
+
+
+        /*
+         * Literal FF.
+         */
+        if (
+            value === 255
+        ) {
+
+            if (
+                i >= bytes.length
+            ) {
+
+                throw new Error(
+                    "Invalid GBC1 literal."
+                );
+
+            }
+
+
+            const marker =
+                bytes[i++];
+
+
+            if (
+                marker !== 0
+            ) {
+
+                throw new Error(
+                    "Invalid GBC1 literal."
+                );
+
+            }
+
+
+            output.push(255);
+
+            continue;
+
+        }
+
+
+        /*
+         * Normal literal.
+         */
+        output.push(
+            value
+        );
+
+    }
+
+
+    return new Uint8Array(
+        output
+    );
+
+}
+
+
+/*
+============================================================
+CREATE 2-BIT PIXEL BUFFER
+============================================================
+*/
+
+function packPixels(
+    imageData,
+    width,
+    height
+) {
+
+    const pixels =
+        imageData.data;
+
+
+    /*
+     * Find unique colours.
+     */
+    const colourMap =
+        new Map();
+
+
+    const colours =
+        [];
+
+
+    /*
+     * Count frequency as well.
+     *
+     * More common colours are assigned lower
+     * 2-bit values.
+     */
+    const frequency =
+        new Map();
+
+
+    for (
+        let i = 0;
+        i < pixels.length;
+        i += 4
+    ) {
+
+        const r =
+            pixels[i];
+
+
+        const g =
+            pixels[i + 1];
+
+
+        const b =
+            pixels[i + 2];
+
+
+        const a =
+            pixels[i + 3];
+
+
+        if (
+            a !== 255
+        ) {
+
+            throw new Error(
+                "Image contains transparency. " +
+                "Game Boy Camera images must be opaque."
+            );
+
+        }
+
+
+        const colour =
+            (
+                (r << 16) |
+                (g << 8) |
+                b
+            ) >>> 0;
+
+
+        frequency.set(
+            colour,
+            (
+                frequency.get(
+                    colour
+                ) || 0
+            ) + 1
+        );
+
+    }
+
+
+    /*
+     * Extract colours.
+     */
+    for (
+        const colour of frequency.keys()
+    ) {
+
+        colours.push(
+            colour
+        );
+
+    }
+
+
+    /*
+     * Maximum four colours.
+     */
+    if (
+        colours.length > 4
+    ) {
+
+        throw new Error(
+            "This image contains " +
+            colours.length +
+            " colours. " +
+            "A lossless Game Boy Camera URL requires " +
+            "4 colours or fewer."
+        );
+
+    }
+
+
+    /*
+     * Sort colours by frequency.
+     *
+     * This tends to make the packed data more
+     * compressible.
+     */
+    colours.sort(
+        (a, b) =>
+            frequency.get(b) -
+            frequency.get(a)
+    );
+
+
+    /*
+     * Map colours to 0..3.
+     */
+    for (
+        let i = 0;
+        i < colours.length;
+        i++
+    ) {
+
+        colourMap.set(
+            colours[i],
+            i
+        );
+
+    }
+
+
+    /*
+     * Pad palette.
+     */
+    while (
+        colours.length < 4
+    ) {
+
+        colours.push(
+            colours.length > 0
+                ? colours[
+                    colours.length - 1
+                ]
+                : 0
+        );
+
+    }
+
+
+    /*
+     * Four pixels per byte.
+     */
+    const packed =
+        new Uint8Array(
+            Math.ceil(
+                width *
+                height /
+                4
+            )
+        );
+
+
+    let packedIndex =
+        0;
+
+
+    let currentByte =
+        0;
+
+
+    let pixelPosition =
+        0;
+
+
+    for (
+        let i = 0;
+        i < pixels.length;
+        i += 4
+    ) {
+
+        const r =
+            pixels[i];
+
+
+        const g =
+            pixels[i + 1];
+
+
+        const b =
+            pixels[i + 2];
+
+
+        const colour =
+            (
+                (r << 16) |
+                (g << 8) |
+                b
+            ) >>> 0;
+
+
+        const index =
+            colourMap.get(
+                colour
+            );
+
+
+        currentByte |=
+            index <<
+            (
+                6 -
+                pixelPosition * 2
+            );
+
+
+        pixelPosition++;
+
+
+        if (
+            pixelPosition === 4
+        ) {
+
+            packed[
+                packedIndex++
+            ] =
+                currentByte;
+
+
+            currentByte =
+                0;
+
+
+            pixelPosition =
+                0;
+
+        }
+
+    }
+
+
+    /*
+     * Final partial byte.
+     */
+    if (
+        pixelPosition !== 0
+    ) {
+
+        packed[
+            packedIndex
+        ] =
+            currentByte;
+
+    }
+
+
+    return {
+        packed,
+        palette: colours
+    };
+
+}
+
+
+/*
+============================================================
+CREATE RAW GBC1 DATA
+============================================================
+*/
+
+function createRawGBC1(
+    width,
+    height,
+    palette,
+    packedPixels,
+    codec
+) {
+
+    /*
+     * Header:
+     *
+     * Byte 0:
+     *     version
+     *
+     * Byte 1:
+     *     flags
+     *
+     *         bits 0-1:
+     *             dimensions
+     *
+     *         bits 2-3:
+     *             codec
+     *
+     * Byte 2-13:
+     *     palette
+     *
+     * Byte 14+:
+     *     pixel data
+     */
+
+
+    let dimensionCode;
+
+
+    if (
+        width === 128 &&
+        height === 112
+    ) {
+
+        dimensionCode =
+            0;
+
+    }
+    else if (
+        width === 160 &&
+        height === 144
+    ) {
+
+        dimensionCode =
+            1;
+
+    }
+    else {
+
+        throw new Error(
+            "Game Boy Camera images must be " +
+            "128×112 or 160×144."
+        );
+
+    }
+
+
+    const flags =
+        dimensionCode |
+        (codec << 2);
+
+
+    const raw =
+        new Uint8Array(
+            14 +
+            packedPixels.length
+        );
+
+
+    raw[0] =
+        GBC_VERSION;
+
+
+    raw[1] =
+        flags;
+
+
+    /*
+     * Palette.
+     */
+    for (
+        let i = 0;
+        i < 4;
+        i++
+    ) {
+
+        const colour =
+            palette[i];
+
+
+        const offset =
+            2 +
+            i * 3;
+
+
+        raw[offset] =
+            (colour >> 16) & 255;
+
+
+        raw[offset + 1] =
+            (colour >> 8) & 255;
+
+
+        raw[offset + 2] =
+            colour & 255;
+
+    }
+
+
+    /*
+     * Pixel data.
+     */
+    raw.set(
+        packedPixels,
+        14
+    );
+
+
+    return raw;
+
+}
+
+
+/*
+============================================================
+ENCODE GBC1
+============================================================
+*/
+
+async function encodeGBC1(
+    imageData,
+    width,
+    height
+) {
+
+    /*
+     * Convert pixels to 2-bit representation.
+     */
+    const {
+        packed,
+        palette
+    } =
+        packPixels(
+            imageData,
+            width,
+            height
+        );
+
+
+    /*
+     * --------------------------------------------------------
+     * CODEC 0
+     *
+     * Raw packed pixels
+     * --------------------------------------------------------
+     */
+
+    const compressedRaw =
+        await deflate(
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                packed,
+                0
+            )
+        );
+
+
+    /*
+     * --------------------------------------------------------
+     * CODEC 1
+     *
+     * XOR/delta
+     * --------------------------------------------------------
+     */
+
+    const xor =
+        xorEncode(
+            packed
+        );
+
+
+    const compressedXor =
+        await deflate(
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                xor,
+                1
+            )
+        );
+
+
+    /*
+     * --------------------------------------------------------
+     * CODEC 2
+     *
+     * XOR + zero RLE
+     * --------------------------------------------------------
+     */
+
+    const rle =
+        rleEncode(
+            xor
+        );
+
+
+    const compressedRle =
+        await deflate(
+            createRawGBC1(
+                width,
+                height,
+                palette,
+                rle,
+                2
+            )
+        );
+
+
+    /*
+     * Choose smallest.
+     */
+    let best =
+        compressedRaw;
+
+
+    if (
+        compressedXor.length <
+        best.length
+    ) {
+
+        best =
+            compressedXor;
+
+    }
+
+
+    if (
+        compressedRle.length <
+        best.length
+    ) {
+
+        best =
+            compressedRle;
+
+    }
+
+
+    /*
+     * Return URL representation.
+     */
+    return (
+        GBC_MAGIC +
+        "/" +
+        bytesToBase64Url(
+            best
+        )
+    );
+
+}
+
+
+/*
+============================================================
+DECODE GBC1
+============================================================
+*/
+
+async function decodeGBC1(
+    encoded
+) {
+
+    if (
+        !encoded.startsWith(
+            GBC_MAGIC + "/"
+        )
+    ) {
+
+        throw new Error(
+            "Invalid GBC1 image."
+        );
+
+    }
+
+
+    const compressed =
+        base64UrlToBytes(
+            encoded.substring(
+                GBC_MAGIC.length + 1
+            )
+        );
+
+
+    const raw =
+        await inflate(
+            compressed
+        );
+
+
+    /*
+     * Minimum header:
+     *
+     * 14 bytes.
+     */
+    if (
+        raw.length < 14
+    ) {
+
+        throw new Error(
+            "GBC1 image is too short."
+        );
+
+    }
+
+
+    /*
+     * Version.
+     */
+    if (
+        raw[0] !== GBC_VERSION
+    ) {
+
+        throw new Error(
+            "Unsupported GBC1 version."
+        );
+
+    }
+
+
+    const flags =
+        raw[1];
+
+
+    /*
+     * Dimensions.
+     */
+    const dimensionCode =
+        flags & 3;
+
+
+    let width;
+    let height;
+
+
+    if (
+        dimensionCode === 0
+    ) {
+
+        width =
+            128;
+
+        height =
+            112;
+
+    }
+    else if (
+        dimensionCode === 1
+    ) {
+
+        width =
+            160;
+
+        height =
+            144;
+
+    }
+    else {
+
+        throw new Error(
+            "Unsupported GBC1 dimensions."
+        );
+
+    }
+
+
+    /*
+     * Codec.
+     */
+    const codec =
+        (
+            flags >> 2
+        ) & 3;
+
+
+    /*
+     * Read palette.
+     */
+    const palette =
+        new Uint8Array(12);
+
+
+    palette.set(
+        raw.subarray(
+            2,
+            14
+        )
+    );
+
+
+    /*
+     * Get compressed pixel representation.
+     */
+    let pixelData =
+        raw.subarray(
+            14
+        );
+
+
+    /*
+     * Reverse codec.
+     */
+    if (
+        codec === 0
+    ) {
+
+        /*
+         * Already packed.
+         */
+
+    }
+    else if (
+        codec === 1
+    ) {
+
+        pixelData =
+            xorDecode(
+                pixelData
+            );
+
+    }
+    else if (
+        codec === 2
+    ) {
+
+        pixelData =
+            xorDecode(
+                rleDecode(
+                    pixelData
+                )
+            );
+
+    }
+    else {
+
+        throw new Error(
+            "Unsupported GBC1 codec."
+        );
+
+    }
+
+
+    /*
+     * Expected packed length.
+     */
+    const expectedLength =
+        Math.ceil(
+            width *
+            height /
+            4
+        );
+
+
+    if (
+        pixelData.length !==
+        expectedLength
+    ) {
+
+        throw new Error(
+            "GBC1 pixel data is invalid."
+        );
+
+    }
+
+
+    /*
+     * Create canvas.
+     */
+    const canvas =
+        document.createElement(
+            "canvas"
+        );
+
+
+    canvas.width =
+        width;
+
+
+    canvas.height =
+        height;
+
+
+    const ctx =
+        canvas.getContext(
+            "2d"
+        );
+
+
+    const imageData =
+        ctx.createImageData(
+            width,
+            height
+        );
+
+
+    /*
+     * Unpack 2-bit pixels.
+     */
+    let pixel =
+        0;
+
+
+    for (
+        let i = 0;
+        i < pixelData.length;
+        i++
+    ) {
+
+        const packed =
+            pixelData[i];
+
+
+        for (
+            let shift = 6;
+            shift >= 0 &&
+            pixel <
+                width * height;
+            shift -= 2
+        ) {
+
+            const colourIndex =
+                (
+                    packed >>
+                    shift
+                ) & 3;
+
+
+            const paletteOffset =
+                colourIndex * 3;
+
+
+            const outputOffset =
+                pixel * 4;
+
+
+            imageData.data[
+                outputOffset
+            ] =
+                palette[
+                    paletteOffset
+                ];
+
+
+            imageData.data[
+                outputOffset + 1
+            ] =
+                palette[
+                    paletteOffset + 1
+                ];
+
+
+            imageData.data[
+                outputOffset + 2
+            ] =
+                palette[
+                    paletteOffset + 2
+                ];
+
+
+            imageData.data[
+                outputOffset + 3
+            ] =
+                255;
+
+
+            pixel++;
+
+        }
+
+    }
+
+
+    ctx.putImageData(
+        imageData,
+        0,
+        0
+    );
+
+
+    return canvas;
+
+}
+
+
+/*
+============================================================
+LOAD GBC1
+============================================================
+*/
+
+async function loadGBC1(
+    encoded
+) {
+
+    const canvas =
+        await decodeGBC1(
+            encoded
+        );
+
+
+    /*
+     * PNG exists ONLY temporarily in RAM
+     * for the <img> element.
+     *
+     * It is NOT in the URL.
+     */
+    const imageUrl =
+        canvas.toDataURL(
+            "image/png"
+        );
+
+
+    photo.onload =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "block";
+
+        };
+
+
+    photo.onerror =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "none";
+
+
+            showError(
+                "Could not display GBC1 image."
+            );
+
+        };
+
+
+    photo.src =
+        imageUrl;
+
+}
+
+
+/*
+============================================================
+LEGACY PNG URL SUPPORT
+============================================================
+
+This preserves your existing:
+
+#iVBORw0KGgo...
+
+URLs.
+*/
+
+function loadLegacyPNG(
+    encoded
+) {
+
+    let base64 =
+        encoded
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+
+
+    while (
+        base64.length % 4 !== 0
+    ) {
+
+        base64 += "=";
+
+    }
+
+
+    photo.onload =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "block";
+
+        };
+
+
+    photo.onerror =
+        function () {
+
+            upload.style.display =
+                "none";
+
+
+            photo.style.display =
+                "none";
+
+
+            showError(
+                "The image data in this URL could not be decoded."
+            );
+
+        };
+
+
+    photo.src =
+        "data:image/png;base64," +
+        base64;
+
 }
 
 
@@ -236,227 +1912,255 @@ LOAD IMAGE FROM URL
 ============================================================
 */
 
-function loadImageFromHash() {
+async function loadImageFromHash() {
+
+    const encoded =
+        window.location.hash.substring(
+            1
+        );
+
 
     /*
-     * Everything after #.
-     */
-    const encoded = window.location.hash.substring(1);
-
-    /*
-     * No image in URL.
-     *
-     * Show uploader.
+     * Nothing in URL.
      */
     if (!encoded) {
 
-        upload.style.display = "flex";
-        photo.style.display = "none";
+        upload.style.display =
+            "flex";
+
+
+        photo.style.display =
+            "none";
+
 
         return;
+
     }
 
 
     try {
 
         /*
-         * Convert URL-safe Base64 back into
-         * normal Base64.
+         * New format.
          */
-        const base64 = makeNormalBase64(encoded);
+        if (
+            encoded.startsWith(
+                GBC_MAGIC + "/"
+            )
+        ) {
 
-
-        /*
-         * IMPORTANT:
-         *
-         * Don't create a Blob.
-         *
-         * Directly create the PNG data URL.
-         *
-         * This is much simpler and works reliably
-         * with the long hash URLs used here.
-         */
-        const imageUrl =
-            "data:image/png;base64," +
-            base64;
-
-
-        /*
-         * Wait until the image has actually decoded.
-         */
-        photo.onload = function () {
-
-            upload.style.display = "none";
-
-            photo.style.display = "block";
-
-        };
-
-
-        photo.onerror = function () {
-
-            upload.style.display = "none";
-
-            photo.style.display = "none";
-
-            showError(
-                "The image data in this URL could not be decoded."
+            await loadGBC1(
+                encoded
             );
 
-        };
+
+            return;
+
+        }
 
 
         /*
-         * Start loading the image.
+         * Old PNG/Base64 format.
          */
-        photo.src = imageUrl;
+        loadLegacyPNG(
+            encoded
+        );
 
     }
     catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
+
+
+        upload.style.display =
+            "none";
+
+
+        photo.style.display =
+            "none";
+
 
         showError(
+            error.message ||
             "Invalid image URL."
         );
 
     }
+
 }
 
 
 /*
 ============================================================
-UPLOAD IMAGE
+UPLOAD
 ============================================================
 */
 
-fileInput.addEventListener("change", function () {
+fileInput.addEventListener(
+    "change",
+    function () {
 
-    const file = fileInput.files[0];
-
-    if (!file) {
-        return;
-    }
-
-
-    const reader = new FileReader();
+        const file =
+            fileInput.files[0];
 
 
-    reader.onload = function () {
+        if (!file) {
 
-        const image = new Image();
+            return;
 
-
-        image.onload = function () {
-
-            /*
-             * Canvas is used to convert the uploaded image
-             * to PNG.
-             *
-             * Original dimensions are preserved.
-             */
-            const canvas =
-                document.createElement("canvas");
+        }
 
 
-            canvas.width =
-                image.naturalWidth;
-
-            canvas.height =
-                image.naturalHeight;
+        const reader =
+            new FileReader();
 
 
-            const ctx =
-                canvas.getContext("2d");
+        reader.onload =
+            function () {
+
+                const image =
+                    new Image();
 
 
-            /*
-             * Disable interpolation.
-             */
-            ctx.imageSmoothingEnabled = false;
+                image.onload =
+                    async function () {
+
+                        try {
+
+                            /*
+                             * Preserve original dimensions.
+                             */
+                            const canvas =
+                                document.createElement(
+                                    "canvas"
+                                );
 
 
-            ctx.drawImage(
-                image,
-                0,
-                0,
-                canvas.width,
-                canvas.height
-            );
+                            canvas.width =
+                                image.naturalWidth;
 
 
-            /*
-             * PNG preserves Game Boy Camera pixels
-             * without JPEG compression artifacts.
-             */
-            const png =
-                canvas.toDataURL("image/png");
+                            canvas.height =
+                                image.naturalHeight;
 
 
-            /*
-             * Remove:
-             *
-             * data:image/png;base64,
-             */
-            const base64 =
-                png.substring(
-                    "data:image/png;base64,".length
+                            const ctx =
+                                canvas.getContext(
+                                    "2d"
+                                );
+
+
+                            /*
+                             * Never interpolate GBC pixels.
+                             */
+                            ctx.imageSmoothingEnabled =
+                                false;
+
+
+                            ctx.drawImage(
+                                image,
+                                0,
+                                0,
+                                canvas.width,
+                                canvas.height
+                            );
+
+
+                            /*
+                             * Get exact RGBA pixels.
+                             */
+                            const imageData =
+                                ctx.getImageData(
+                                    0,
+                                    0,
+                                    canvas.width,
+                                    canvas.height
+                                );
+
+
+                            /*
+                             * Encode directly.
+                             *
+                             * NO PNG.
+                             *
+                             * NO PNG Base64.
+                             */
+                            const encoded =
+                                await encodeGBC1(
+                                    imageData,
+                                    canvas.width,
+                                    canvas.height
+                                );
+
+
+                            /*
+                             * Build shareable URL.
+                             */
+                            const url =
+                                window.location.origin +
+                                window.location.pathname +
+                                "#" +
+                                encoded;
+
+
+                            /*
+                             * Go to the URL.
+                             */
+                            window.location.href =
+                                url;
+
+                        }
+                        catch (error) {
+
+                            console.error(
+                                error
+                            );
+
+
+                            showError(
+                                error.message ||
+                                "Could not encode Game Boy Camera image."
+                            );
+
+                        }
+
+                    };
+
+
+                image.onerror =
+                    function () {
+
+                        showError(
+                            "Could not read the selected image."
+                        );
+
+                    };
+
+
+                image.src =
+                    reader.result;
+
+            };
+
+
+        reader.onerror =
+            function () {
+
+                showError(
+                    "Could not read the selected file."
                 );
 
-
-            /*
-             * Make Base64 safe to put inside a URL.
-             */
-            const encoded =
-                makeUrlSafe(base64);
+            };
 
 
-            /*
-             * Build the shareable URL.
-             *
-             * The image is stored entirely after #.
-             */
-            const url =
-                window.location.origin +
-                window.location.pathname +
-                "#" +
-                encoded;
-
-
-            /*
-             * Navigate to it in the SAME window.
-             */
-            window.location.href = url;
-
-        };
-
-
-        image.onerror = function () {
-
-            showError(
-                "Could not read the selected image."
-            );
-
-        };
-
-
-        image.src = reader.result;
-
-    };
-
-
-    reader.onerror = function () {
-
-        showError(
-            "Could not read the selected file."
+        reader.readAsDataURL(
+            file
         );
 
-    };
-
-
-    reader.readAsDataURL(file);
-
-});
+    }
+);
 
 
 /*
@@ -465,75 +2169,106 @@ CLICK IMAGE → COPY URL
 ============================================================
 */
 
-photo.addEventListener("click", async function () {
+photo.addEventListener(
+    "click",
+    async function () {
 
-    const url =
-        window.location.href;
-
-
-    try {
-
-        await navigator.clipboard.writeText(url);
-
-        copiedBox.style.display = "block";
-
-
-        setTimeout(function () {
-
-            copiedBox.style.display = "none";
-
-        }, 1500);
-
-    }
-    catch (error) {
-
-        /*
-         * Fallback for browsers where the Clipboard API
-         * isn't available.
-         */
-        const textarea =
-            document.createElement("textarea");
-
-
-        textarea.value = url;
-
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-
-
-        document.body.appendChild(textarea);
-
-        textarea.select();
+        const url =
+            window.location.href;
 
 
         try {
 
-            document.execCommand("copy");
+            await navigator.clipboard.writeText(
+                url
+            );
 
-            copiedBox.style.display = "block";
+
+            copiedBox.style.display =
+                "block";
 
 
-            setTimeout(function () {
+            setTimeout(
+                function () {
 
-                copiedBox.style.display = "none";
+                    copiedBox.style.display =
+                        "none";
 
-            }, 1500);
+                },
+                1500
+            );
 
         }
-        catch (e) {
+        catch (error) {
 
-            showError(
-                "Could not copy URL."
+            /*
+             * Fallback.
+             */
+            const textarea =
+                document.createElement(
+                    "textarea"
+                );
+
+
+            textarea.value =
+                url;
+
+
+            textarea.style.position =
+                "fixed";
+
+
+            textarea.style.left =
+                "-9999px";
+
+
+            document.body.appendChild(
+                textarea
+            );
+
+
+            textarea.select();
+
+
+            try {
+
+                document.execCommand(
+                    "copy"
+                );
+
+
+                copiedBox.style.display =
+                    "block";
+
+
+                setTimeout(
+                    function () {
+
+                        copiedBox.style.display =
+                            "none";
+
+                    },
+                    1500
+                );
+
+            }
+            catch (e) {
+
+                showError(
+                    "Could not copy URL."
+                );
+
+            }
+
+
+            document.body.removeChild(
+                textarea
             );
 
         }
 
-
-        document.body.removeChild(textarea);
-
     }
-
-});
+);
 
 
 /*
@@ -547,4 +2282,5 @@ loadImageFromHash();
 </script>
 
 </body>
+
 </html>
