@@ -13,7 +13,7 @@
              user-scalable=no"
 >
 
-<title>Game Boy Camera</title>
+<title>Game Boy Camera Viewer</title>
 
 <style>
 
@@ -51,16 +51,6 @@ body {
 ============================================================
 IMAGE VIEWER
 ============================================================
-
-The image always:
-
-    - fits inside the viewport
-    - preserves aspect ratio
-    - remains centred
-    - never gets cropped
-    - never gets stretched
-    - uses nearest-neighbour/pixelated scaling
-============================================================
 */
 
 #photo {
@@ -68,28 +58,24 @@ The image always:
     display: none;
 
     /*
-     * Allow the natural aspect ratio to determine
-     * the dimension that isn't constrained.
+     * Natural aspect ratio.
      */
     width: auto;
     height: auto;
 
     /*
-     * Never exceed the viewport.
-     *
-     * 98% leaves a tiny amount of space around
-     * the image on phones and desktops.
+     * Always fit inside the viewport.
      */
     max-width: 98vw;
     max-height: 98vh;
 
     /*
-     * Preserve the original aspect ratio.
+     * Preserve aspect ratio.
      */
     object-fit: contain;
 
     /*
-     * Centre the image regardless of viewport size.
+     * Always centre the image.
      */
     position: absolute;
 
@@ -100,9 +86,8 @@ The image always:
         translate(-50%, -50%);
 
     /*
-     * CRITICAL FOR GAME BOY CAMERA
-     *
-     * Prevent smoothing when enlarged.
+     * Game Boy Camera pixels should
+     * never be smoothed.
      */
     image-rendering: pixelated;
     image-rendering: crisp-edges;
@@ -318,13 +303,13 @@ IMAGE
 #
 # The PNG is NOT stored in the URL.
 #
-# The URL contains:
+# Encoding:
 #
 #   4-colour pixels
 #       ↓
 #   2-bit packing
 #       ↓
-#   optional XOR transform
+#   optional XOR
 #       ↓
 #   optional RLE
 #       ↓
@@ -333,7 +318,7 @@ IMAGE
 #   Base64URL
 #
 #
-# Everything is lossless.
+# The format is lossless.
 #
 ################################################################
 */
@@ -580,13 +565,7 @@ async function inflate(bytes) {
 
 /*
 ============================================================
-XOR / DELTA ENCODE
-============================================================
-
-Each byte is XORed with the previous byte.
-
-This creates more repeated/zero bytes when neighbouring
-Game Boy Camera pixels are similar.
+XOR ENCODE
 ============================================================
 */
 
@@ -625,7 +604,7 @@ function xorEncode(bytes) {
 
 /*
 ============================================================
-XOR / DELTA DECODE
+XOR DECODE
 ============================================================
 */
 
@@ -666,32 +645,6 @@ function xorDecode(bytes) {
 ============================================================
 RLE ENCODE
 ============================================================
-
-Simple and unambiguous format:
-
-Literal byte:
-    00-FF
-
-Zero run:
-    FF 00 <count>
-
-Because FF itself could otherwise be a literal,
-FF is escaped as:
-
-    FF 00 01
-
-representing one literal FF.
-
-For zero runs:
-
-    FF 00 <count>
-
-where count is 1-255.
-
-A literal zero is simply:
-
-    00
-============================================================
 */
 
 function rleEncode(bytes) {
@@ -706,7 +659,7 @@ function rleEncode(bytes) {
     ) {
 
         /*
-         * Count zero run.
+         * Zero run.
          */
         if (
             bytes[i] === 0
@@ -730,8 +683,8 @@ function rleEncode(bytes) {
 
 
             /*
-             * A single zero is cheaper as
-             * a literal zero.
+             * A single zero is cheaper
+             * as a literal.
              */
             if (
                 count === 1
@@ -827,7 +780,7 @@ function rleDecode(bytes) {
 
 
         /*
-         * RLE/escape sequence.
+         * RLE / escape sequence.
          */
         if (
             i + 1 >= bytes.length
@@ -861,9 +814,7 @@ function rleDecode(bytes) {
 
 
         /*
-         * FF 00 01
-         *
-         * means literal FF.
+         * FF 00 01 = literal FF
          */
         if (
             count === 1
@@ -877,7 +828,7 @@ function rleDecode(bytes) {
 
 
         /*
-         * Otherwise it is a zero run.
+         * Otherwise zero run.
          */
         for (
             let n = 0;
@@ -920,7 +871,7 @@ function packPixels(
 
 
     /*
-     * Count unique RGB colours.
+     * Count colours.
      */
     for (
         let i = 0;
@@ -982,7 +933,7 @@ function packPixels(
 
 
     /*
-     * Lossless means maximum four colours.
+     * Game Boy Camera uses four shades.
      */
     if (
         colours.length > 4
@@ -1000,8 +951,7 @@ function packPixels(
 
 
     /*
-     * Most common colours get the lowest
-     * 2-bit values.
+     * Most common colours first.
      */
     colours.sort(
         (a, b) =>
@@ -1125,7 +1075,7 @@ function packPixels(
 
 
     /*
-     * Handle final partial byte.
+     * Final partial byte.
      */
     if (
         pixelPosition !== 0
@@ -1149,7 +1099,7 @@ function packPixels(
 
 /*
 ============================================================
-CREATE RAW GBC1 DATA
+CREATE GBC1 DATA
 ============================================================
 */
 
@@ -1206,7 +1156,7 @@ function createRawGBC1(
     /*
      * Header:
      *
-     * 2 bytes version/flags
+     * 2 bytes flags/version
      * 12 bytes palette
      */
     const raw =
@@ -1274,20 +1224,6 @@ function createRawGBC1(
 ============================================================
 ENCODE GBC1
 ============================================================
-
-Three compression approaches are tested.
-
-The smallest result wins.
-
-Codec 0:
-    packed pixels → DEFLATE
-
-Codec 1:
-    packed pixels → XOR → DEFLATE
-
-Codec 2:
-    packed pixels → XOR → RLE → DEFLATE
-============================================================
 */
 
 async function encodeGBC1(
@@ -1309,6 +1245,8 @@ async function encodeGBC1(
 
     /*
      * CODEC 0
+     *
+     * Packed → DEFLATE
      */
     const raw0 =
         createRawGBC1(
@@ -1328,6 +1266,8 @@ async function encodeGBC1(
 
     /*
      * CODEC 1
+     *
+     * Packed → XOR → DEFLATE
      */
     const xor =
         xorEncode(
@@ -1353,6 +1293,8 @@ async function encodeGBC1(
 
     /*
      * CODEC 2
+     *
+     * Packed → XOR → RLE → DEFLATE
      */
     const rle =
         rleEncode(
@@ -1377,7 +1319,7 @@ async function encodeGBC1(
 
 
     /*
-     * Choose the smallest.
+     * Choose smallest.
      */
     let best =
         compressed0;
@@ -1406,7 +1348,7 @@ async function encodeGBC1(
 
 
     /*
-     * Convert to URL.
+     * Create URL payload.
      */
     return (
         GBC_MAGIC +
@@ -1561,7 +1503,7 @@ async function decodeGBC1(
 
 
     /*
-     * Reverse compression transform.
+     * Reverse codec.
      */
     if (
         codec === 0
@@ -1604,7 +1546,7 @@ async function decodeGBC1(
 
 
     /*
-     * Validate size.
+     * Validate pixel data size.
      */
     const expectedLength =
         Math.ceil(
@@ -1627,7 +1569,7 @@ async function decodeGBC1(
 
 
     /*
-     * Canvas.
+     * Create canvas.
      */
     const canvas =
         document.createElement(
@@ -1657,7 +1599,7 @@ async function decodeGBC1(
 
 
     /*
-     * Unpack 2-bit pixels.
+     * Unpack pixels.
      */
     let pixel =
         0;
@@ -1747,7 +1689,7 @@ async function decodeGBC1(
 
 /*
 ============================================================
-LOAD NEW GBC1 IMAGE
+LOAD GBC1 IMAGE
 ============================================================
 */
 
@@ -1762,10 +1704,10 @@ async function loadGBC1(
 
 
     /*
-     * Convert to PNG only temporarily so that
-     * the existing <img> element can display it.
+     * PNG is created only in memory so the
+     * existing <img> element can display it.
      *
-     * The PNG is NEVER stored in the URL.
+     * The PNG is NOT stored in the URL.
      */
     const imageUrl =
         canvas.toDataURL(
@@ -1812,14 +1754,7 @@ async function loadGBC1(
 
 /*
 ============================================================
-LEGACY PNG URL SUPPORT
-============================================================
-
-Existing URLs beginning with:
-
-#iVBORw0KGgo...
-
-will continue to work.
+LOAD OLD PNG/BASE64 URL
 ============================================================
 */
 
@@ -1882,7 +1817,7 @@ function loadLegacyPNG(
 
 /*
 ============================================================
-LOAD IMAGE FROM URL
+LOAD IMAGE FROM HASH
 ============================================================
 */
 
@@ -1912,6 +1847,13 @@ async function loadImageFromHash() {
     }
 
 
+    /*
+     * Hide old error.
+     */
+    errorBox.style.display =
+        "none";
+
+
     try {
 
         /*
@@ -1934,8 +1876,7 @@ async function loadImageFromHash() {
 
 
         /*
-         * Otherwise assume legacy
-         * PNG/Base64 format.
+         * Existing PNG/Base64 format.
          */
         loadLegacyPNG(
             encoded
@@ -2028,7 +1969,7 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Never smooth the uploaded image.
+                             * Disable interpolation.
                              */
                             ctx.imageSmoothingEnabled =
                                 false;
@@ -2044,7 +1985,7 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Get exact RGBA pixels.
+                             * Get exact pixels.
                              */
                             const imageData =
                                 ctx.getImageData(
@@ -2056,9 +1997,9 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Encode directly to GBC1.
+                             * Encode image.
                              *
-                             * No PNG is stored.
+                             * NO PNG is put into the URL.
                              */
                             const encoded =
                                 await encodeGBC1(
@@ -2069,20 +2010,25 @@ fileInput.addEventListener(
 
 
                             /*
-                             * Create URL.
+                             * IMPORTANT:
+                             *
+                             * Changing only the hash does not
+                             * reload the page.
+                             *
+                             * Therefore we explicitly call
+                             * loadImageFromHash() below.
                              */
-                            const url =
-                                window.location.origin +
-                                window.location.pathname +
-                                "#" +
+                            window.location.hash =
                                 encoded;
 
 
                             /*
-                             * Navigate to it.
+                             * Immediately display the newly
+                             * generated image.
+                             *
+                             * NO REFRESH REQUIRED.
                              */
-                            window.location.href =
-                                url;
+                            await loadImageFromHash();
 
                         }
                         catch (error) {
@@ -2131,6 +2077,37 @@ fileInput.addEventListener(
         reader.readAsDataURL(
             file
         );
+
+    }
+);
+
+
+/*
+============================================================
+HASH CHANGED
+============================================================
+
+This makes browser Back/Forward work.
+
+Example:
+
+Photo A
+    ↓
+Photo B
+    ↓
+Photo C
+    ↓
+BACK
+    ↓
+Photo B
+============================================================
+*/
+
+window.addEventListener(
+    "hashchange",
+    function () {
+
+        loadImageFromHash();
 
     }
 );
